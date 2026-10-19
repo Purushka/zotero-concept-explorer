@@ -1,0 +1,465 @@
+import {createLocalizer,resolveLocale,LANGUAGES,localizeModelMessages} from './localization.mjs';
+import {KnowledgeTreeStore} from './knowledge-tree-store.mjs';
+import {deleteSessionWithConfirmation,confirmSessionDeletion} from './session-deletion.mjs';
+import {waitForPanelFrame} from './panel-loader.mjs';
+import {createNativeTabHost} from './native-tab-host.mjs';
+import {createFloatingWindow} from './floating-window.mjs';
+export {omitOwnStartupTabs} from './native-tab-host.mjs';
+import {createZoteroStorage} from './zotero-storage.mjs';
+import {createReaderNodeTracker} from './reader-node-tracker.mjs';
+import {validateModelConfig,buildRequest,parseExplanation,explanationMessages,conversationMessages,friendlyHTTPError} from './model-adapter.mjs';
+
+import {recoverExplanation,normalizeAnswer} from './explanation-format.mjs';
+import {requestModel} from './model-stream.mjs';
+
+const PREF = 'extensions.zotero.conceptExplorer.';
+const LOGIN = 'chrome://concept-explorer';
+const REALM = 'Concept Explorer API';
+const XHTML = 'http://www.w3.org/1999/xhtml';
+const plain = value => JSON.parse(JSON.stringify(value));
+
+export async function start({id,version,rootURI}) {
+  const prefGet = key => Zotero.Prefs.get(PREF+key,true);
+  const prefSet = (key,value) => Zotero.Prefs.set(PREF+key,value,true);
+  const languagePreference=()=>LANGUAGES.includes(prefGet('language')) ? prefGet('language') : 'auto';
+  const l10n=createLocalizer(resolveLocale(languagePreference(),Zotero.locale || Services.locale?.appLocaleAsBCP47 || 'en-US'));
+  const t=(key,values)=>l10n.t(key,values);
+  let alive = true;
+  const windows = new Map(), jobs = new Map();
+  const eventNodes = createReaderNodeTracker({isDeadWrapper:node => Components.utils.isDeadWrapper(node)});
+  const storage = createZoteroStorage({dataDirectory:Zotero.DataDirectory.dir,IOUtils,PathUtils});
+  let store, startupError = '';
+  try { store = await KnowledgeTreeStore.open(storage,{idFactory:() => Zotero.Utilities.randomString(24)}); }
+  catch { startupError = t("archiveError"); }
+  const logins = () => Services.logins.findLogins(LOGIN,null,REALM);
+  async function credentials() { return logins()[0]?.password ?? ''; }
+  function config() { return {protocol:prefGet('protocol') || 'chat',baseURL:prefGet('baseURL') || '',model:prefGet('model') || ''}; }
+  async function settings() { return {...config(),language:languagePreference(),locale:l10n.locale,hasKey:!!(await credentials()),archivePath:storage.paths.file,version}; }
+  async function saveLanguage(language) {
+    if(!LANGUAGES.includes(language))throw new Error(t('invalidLanguage'));
+    prefSet('language',language);
+    l10n.setLocale(resolveLocale(language,Zotero.locale || Services.locale?.appLocaleAsBCP47 || 'en-US'));
+    for(const record of windows.values()) {
+      for(const menu of record.menus)menu.setAttribute('label',t(menu.dataset.conceptExplorerLabel));
+      for(const [surface,frame] of Object.entries(record.frames))frame?.setAttribute('title',t(surface==='tab' ? 'tabFrame' : 'floatingFrame'));
+      record.floatingWindow?.setLocale(l10n.locale);
+    }
+    eventNodes.forEach(node=>{if(node.dataset.conceptExplorerLabel)node.textContent=t(node.dataset.conceptExplorerLabel);if(node.dataset.conceptExplorerTitle)node.title=t(node.dataset.conceptExplorerTitle);});
+    notify();return {language,locale:l10n.locale};
+  }
+  async function saveSettings(input) {
+    const validated = validateModelConfig(input);
+    if (input.key && /[\r\n]/.test(input.key)) throw new Error(t("keyNewline"));
+    if (input.clearKey) for (const login of logins()) Services.logins.removeLogin(login);
+    else if (input.key) {
+      const LoginInfo = Components.Constructor('@mozilla.org/login-manager/loginInfo;1','nsILoginInfo','init');
+      const next = new LoginInfo(LOGIN,null,REALM,'api',input.key,'','');
+      const old = logins()[0];
+      if (old) Services.logins.modifyLogin(old,next);
+      else await Services.logins.addLoginAsync(next);
+    }
+    for (const [key,value] of Object.entries(validated)) prefSet(key,value);
+    return settings();
+  }
+  async function request(messages,job,probe=false) {
+    let built; const selectedConfig=config();
+    try { built = buildRequest(selectedConfig,await credentials(),messages,{probe}); }
+    catch (error) { throw new Error(error.message); }
+    try {
+      return await requestModel(Zotero.HTTP,built,selectedConfig.protocol,{
+        probe,isCancelled:() => !!job?.cancelled || !alive,
+        setCancel:cancel => { if(job) job.cancel=cancel; },
+        onText:text => { if(job) {job.raw=text;schedulePreview(job);} }
+      });
+    } catch (error) { throw new Error(friendlyHTTPError(error)); }
+  }
+  function preview(job) {
+    if (job.kind === 'explanation') job.preview=parseExplanation(job.raw ?? '',{partial:true});
+    else job.text=normalizeAnswer(job.raw ?? '',{partial:true});
+  }
+  function schedulePreview(job) {
+    if(job.previewScheduled)return;
+    job.previewScheduled=true;
+    // The bootstrap scope has no timer globals. Use Zotero's own promise delay.
+    void Zotero.Promise.delay(80).then(() => {
+      job.previewScheduled=false;
+      if(alive && job.status==='loading' && !job.cancelled) {preview(job);notify();}
+    });
+  }
+  function endJob(job,error) {
+    preview(job);
+    job.status=job.cancelled ? 'cancelled' : 'error';
+    job.error=job.cancelled ? t("cancelledPreview") : error.message;
+  }
+  function cancel(nodeId) {
+    const job=jobs.get(nodeId);if(job?.status!=='loading')return;
+    job.cancelled=true;try{job.cancel?.();}catch{}
+    endJob(job,new Error(t("stopped")));notify();
+  }
+  function snapshot() {
+    const archive=store?.snapshot() ?? null;
+    // Repair old malformed JSON only for display, never overwrite the archive.
+    if(archive) for(const node of archive.nodes) node.explanation=recoverExplanation(node.explanation);
+    return {archive,startupError,language:languagePreference(),locale:l10n.locale,version,jobs:[...jobs].filter(([nodeId]) => archive?.nodes.some(node => node.id === nodeId)).map(([nodeId,job]) => ({nodeId,status:job.status,kind:job.kind,error:job.error ?? '',preview:job.preview ?? null,text:job.text ?? ''}))};
+  }
+  function notify() {
+    if (!alive) return;
+    const value = snapshot();
+    for (const record of windows.values()) {syncFloating(record);for (const surface of ['floating','tab']) {
+      try { record.frames[surface]?.contentWindow?.ConceptPanel?.update(plain(value)); }
+      catch { /* Closing a reader window must not interrupt saved transactions. */ }
+    }}
+  }
+  function requireStore() { if (!store) throw new Error(startupError); return store; }
+  function ancestors(node) {
+    const chain=[];
+    while (node.parentId) { node=store.getSession(node.parentId); chain.unshift(node); }
+    return chain;
+  }
+  async function generate(nodeId) {
+    requireStore();
+    if (jobs.get(nodeId)?.status === 'loading') return;
+    const job={status:'loading',kind:'explanation',cancelled:false};
+    jobs.set(nodeId,job); notify();
+    try {
+      const node=store.getSession(nodeId);
+      const document=store.snapshot().documents.find(doc => doc.id === node.documentId);
+      const answer=await request(localizeModelMessages(explanationMessages(node,document,ancestors(node)),l10n.locale),job);
+      if (job.cancelled || !alive) return;
+      await store.setExplanation(nodeId,parseExplanation(answer));
+      job.status='saved';
+    } catch (error) { endJob(job,error); }
+    notify();
+  }
+  async function ask(nodeId,question) {
+    requireStore();
+    if (!String(question).trim()) return;
+    if (jobs.get(nodeId)?.status === 'loading') throw new Error(t("alreadyAnswering"));
+    const questionText=String(question).trim();
+    const previous=store.getSession(nodeId);
+    const job={status:'loading',kind:'ask',cancelled:false}; jobs.set(nodeId,job); notify();
+    // Persist the user's question before sending. Failure never clears their draft.
+    try { await store.appendMessage(nodeId,{role:'user',content:questionText});
+    await store.saveSessionView(nodeId,{draft:''});
+    } catch(error) {endJob(job,error);notify();throw error;}
+    // Network work runs in the background so navigation never waits for the model.
+    void answerQuestion(nodeId,previous,questionText,job);
+  }
+  async function answerQuestion(nodeId,previous,questionText,job) {
+    try {
+      const answer=await request(localizeModelMessages(conversationMessages(previous,questionText),l10n.locale),job);
+      if (job.cancelled || !alive) return;
+      await store.appendMessage(nodeId,{role:'assistant',content:normalizeAnswer(answer)}); job.status='saved';
+    } catch (error) { endJob(job,error); }
+    notify();
+  }
+  async function retry(nodeId) {
+    requireStore();
+    if (jobs.get(nodeId)?.status === 'loading') return;
+    const previous=store.getSession(nodeId),last=previous.messages.at(-1);
+    if (last?.role === 'user') {
+      previous.messages.pop();
+      const job={status:'loading',kind:'ask',cancelled:false}; jobs.set(nodeId,job); notify();
+      void answerQuestion(nodeId,previous,last.content,job);
+    } else void generate(nodeId);
+  }
+  async function child(parentId,concept,context='') {
+    requireStore();
+    const parent=store.getSession(parentId);
+    const name=String(concept).trim();
+    if (!name || name.length > 600) throw new Error(t("chooseConcept"));
+    const existing=store.snapshot().nodes.find(node => node.parentId === parentId && node.concept === name);
+    let node;
+    if (existing) { await store.openSession(existing.id,'floating'); node=existing; }
+    else node=await store.createSession({documentId:parent.documentId,parentId,concept:name,source:{selectedText:name,context:context || parent.explanation.detail,location:parent.source.location}});
+    notify();
+    if (!node.explanation.detail) void generate(node.id);
+    return node;
+  }
+  async function mutate(action,args=[]) {
+    requireStore();
+    const allowed=['openSession','openDocument','closeFloating','returnToParent','showKnowledgeTree','resumeReading','saveSessionView'];
+    if (!allowed.includes(action)) throw new Error('Unsupported operation');
+    let result;
+    try { result=await store[action](...args); }
+    catch (error) {
+      // Another frame may flush a captured draft after this node was deleted.
+      // The store rejects before writing; stale view saves can be discarded.
+      if (action==='saveSessionView' && !store.snapshot().nodes.some(node => node.id===args[0])) return null;
+      throw error;
+    }
+    notify(); return result;
+  }
+  async function navigateOriginal(nodeId) {
+    const node=requireStore().getSession(nodeId);
+    const doc=store.snapshot().documents.find(doc => doc.id === node.documentId);
+    const item=Zotero.Items.getByLibraryAndKey(doc.identity.libraryId,doc.identity.attachmentKey);
+    if (!item || item.deleted) throw new Error(t("attachmentMissing"));
+    await Zotero.Reader.open(item.id,node.source.location.pageIndex === null ? undefined : {pageIndex:node.source.location.pageIndex});
+  }
+  const bridge = {
+    state:async () => snapshot(),settings,saveSettings,saveLanguage,child,retry,ask,cancel,mutate,navigateOriginal,
+    async probe() { await request([{role:'user',content:'只回复 OK。'}],null,true); return t("probeSucceeded"); }
+  };
+  function trackNode(node) { eventNodes.track(node); }
+  function reportError(win,error) {
+    const record=windows.get(win),panel=record?.frames[record.surface]?.contentWindow?.ConceptPanel;
+    if(panel) panel.showError(error.message);
+    else Zotero.alert(win,t("appName"),l10n.message(error.message));
+  }
+  function openSafely(win,initial) { void showPanel(win,initial).catch(error => reportError(win,error)); }
+  function hideFloating(record) {
+    if(record.frames.floating) record.frames.floating.style.display='none';
+    record.floatingWindow?.setVisible(false);
+  }
+  function floatingVisible(record) {
+    const w=store?.snapshot().workspace;
+    return !!(record.overlayVisible && w?.floatingNodeId && w.activeDocumentId===record.sourceDocumentId &&
+      (!record.win.Zotero_Tabs || record.win.Zotero_Tabs.selectedID===record.sourceTabId || record.host?.selected()));
+  }
+  function syncFloating(record) {
+    const visible=floatingVisible(record);
+    if(record.frames.floating)record.frames.floating.style.display=visible ? 'block' : 'none';
+    record.floatingWindow?.setVisible(visible);
+    if(record.floatVisible!==visible) {record.floatVisible=visible;try {void record.frames.floating?.contentWindow?.ConceptPanel?.visibilityChanged(visible).catch(() => {});}catch{}}
+  }
+  async function flushRecord(record) {
+    for(const frame of Object.values(record.frames)) await frame?.contentWindow?.ConceptPanel?.flushViews();
+  }
+  function addWindow(win) {
+    if (!alive || !win || win.closed || windows.has(win)) return;
+    const record={win,frames:{floating:null,tab:null},loaded:{},menus:[],selection:null,surface:'floating',overlayVisible:false,sourceTabId:null};
+    windows.set(win,record);
+    const menu=win.document.getElementById('menu_ToolsPopup');
+    for (const [suffix,label,initial] of [['tree',t("menuTree"),'knowledge'],['settings',t("menuSettings"),'settings']]) {
+      if (!menu) continue;
+      const item=win.document.createXULElement('menuitem');
+      item.dataset.conceptExplorerLabel=suffix==='tree' ? 'menuTree' : 'menuSettings';
+      item.id='concept-explorer-'+suffix; item.setAttribute('label',label);
+      item.addEventListener('command',() => openSafely(win,initial));menu.append(item);record.menus.push(item);
+    }
+    record.key=event => {
+      if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 'e') {
+        event.preventDefault();
+        if (record.selection && (!win.Zotero_Tabs || record.selection.reader.tabID===win.Zotero_Tabs.selectedID)) void explainSelection(record.selection.reader,record.selection.annotation,record.selection.doc);
+        else openSafely(win,'knowledge');
+      }
+    };
+    win.addEventListener('keydown',record.key);
+  }
+  function ensureHost(record) {
+    if(record.host) return record.host;
+    record.host=createNativeTabHost({window:record.win,
+      onSelect:() => {
+        syncFloating(record);
+        try { record.frames.tab?.contentWindow?.ConceptPanel?.visibilityChanged(true); } catch {}
+      },
+      onClose:(_tab,{disposed}={}) => {
+        try { void record.frames.tab?.contentWindow?.ConceptPanel?.flushViews().catch(error => reportError(record.win,error)); } catch {}
+        record.frames.tab=null;record.loaded.tab=null;
+        if(alive && !disposed && !record.win.closed) prefSet('workspaceTabOpen',false);
+      },
+      onRestore:(_tab,index) => showPanel(record.win,'reading',{surface:'tab',index}),
+    });
+    return record.host;
+  }
+  function removeWindow(win) {
+    const record=windows.get(win);if(!record)return;
+    try { void flushRecord(record).catch(() => {}); } catch {}
+    win.removeEventListener('keydown',record.key);
+    for(const menu of record.menus)menu.remove();
+    record.floatingWindow?.dispose();
+    record.host?.dispose();
+    for(const frame of Object.values(record.frames))frame?.remove();
+    windows.delete(win);
+  }
+  async function routeMutation(record,surface,action,args=[]) {
+    const result=await mutate(action,args);
+    if(action==='saveSessionView') return result;
+    const w=store.snapshot().workspace;
+    if(action==='closeFloating') {
+      if(surface==='floating') {record.overlayVisible=false;hideFloating(record);}
+      return result;
+    }
+    if(action==='openSession' && args[1]==='floating' && !store.getSession(args[0]).parentId) {
+      await navigateOriginal(args[0]);
+      await showPanel(record.win,'reading',{surface:'floating'});
+    } else if(action==='openSession' && args[1]==='floating') {
+      await showPanel(record.win,'reading',{surface:'tab',select:false});
+      await showPanel(record.win,'reading',{surface:'floating'});
+    } else {
+      await showPanel(record.win,w.view==='knowledge' ? 'knowledge' : 'reading',{surface:action==='resumeReading' && surface==='floating' && !w.pageNodeId ? 'floating' : 'tab'});
+    }
+    return result;
+  }
+  async function showPanel(win,initial='reading',{surface,select=true,index}={}) {
+    if(!alive) return;
+    const w=store?.snapshot().workspace;
+    surface ??= initial!=='reading' || w?.pageNodeId || !w?.floatingNodeId ? 'tab' : 'floating';
+    if(surface==='tab' && !win?.Zotero_Tabs)win=Zotero.getMainWindow();
+    addWindow(win);const record=windows.get(win);if(!record) return;
+    if(initial==='knowledge' && store && store.snapshot().workspace.view!=='knowledge')await store.showKnowledgeTree();
+    if(initial==='reading' && store && store.snapshot().workspace.view!=='reading')await store.resumeReading();
+    record.surface=surface;
+    let container;
+    if(surface==='tab') {
+      // The entire page lives in the tab deck, never above Zotero's tab bar.
+      container=ensureHost(record).ensure({select:false,index,title:t('appName')}).container;
+      prefSet('workspaceTabOpen',true);
+      // Selecting the native page does not dismiss its floating companion.
+    } else {
+      container=win.document.documentElement;
+      record.overlayVisible=true;record.sourceDocumentId=store?.snapshot().workspace.activeDocumentId;
+      if(!record.host?.selected()) record.sourceTabId=win.Zotero_Tabs?.selectedID ?? null;
+    }
+    if(!record.frames[surface]) {
+      const frame=win.document.createElementNS(XHTML,'iframe');
+      frame.id=surface==='tab' ? 'concept-explorer-tab-panel' : 'concept-explorer-panel';
+      frame.setAttribute('title',surface==='tab' ? t("tabFrame") : t("floatingFrame"));
+      frame.setAttribute('flex','1');
+      frame.style.cssText=surface==='tab'
+        ? 'display:block;position:relative;border:0;width:100%;height:100%;flex:1;min-width:0;min-height:0;background:transparent;'
+        : 'position:fixed;z-index:2147483600;border:0;border-radius:16px;box-shadow:0 16px 65px #0004;background:transparent;left:auto;top:auto;right:22px;bottom:22px;width:min(440px,calc(100vw - 32px));height:min(610px,calc(100vh - 110px));';
+      record.frames[surface]=frame;
+      const uri='chrome://concept-explorer/content/panel.html';
+      record.loaded[surface]=waitForPanelFrame({frame,window:win,uri,initialize:async content => {
+        content.ConceptBridge={...bridge,
+          mutate:(action,args) => routeMutation(record,surface,action,args),
+          deleteSession:async nodeId => {
+            const result=await deleteSessionWithConfirmation({store:requireStore(),nodeId,jobs,confirm:plan => confirmSessionDeletion(Zotero,win,plan,l10n)});
+            if (result) notify();
+            // Do not navigate, dismiss a retained tab or reopen a deleted float.
+            return result;
+          },
+          child:async (...args) => {const node=await child(...args);await showPanel(win,'reading',{surface:'tab'});await showPanel(win,'reading',{surface:'floating'});return node;},
+          openView:view => showPanel(win,view,{surface:'tab'}),
+          isVisible:() => surface==='tab' ? record.host?.selected() : floatingVisible(record),
+          presentation:(_mode,view) => {
+            if(surface!=='tab')return;
+            const node=view?.nodeId && store?.getSession(view.nodeId);
+            const title=view?.screen==='settings' ? t("settingsTab") : store?.snapshot().workspace.view==='knowledge' ? t("treeTab") : node ? t('conceptTab',{concept:node.concept}) : t("appName");
+            void record.host?.rename(title).catch(() => {});
+          },
+          dismiss:async () => {
+            await content.ConceptPanel.flushViews();
+            if(surface==='tab')record.host?.close();
+            else {record.overlayVisible=false;hideFloating(record);}
+          },
+        };
+        await content.ConceptPanel.init(initial,{surface});
+        if(surface==='floating') record.floatingWindow=createFloatingWindow({window:win,frame,interact:content.interact,locale:l10n.locale,
+          initialPosition:prefGet('floatingWindowPosition'),
+          onSave:position => prefSet('floatingWindowPosition',JSON.stringify(position)),
+          onError:error => reportError(win,error),
+        });
+      }});
+      frame.src=uri;container.append(frame);
+      try {await record.loaded[surface];}
+      catch(error) {
+        if(record.frames[surface] !== frame || !alive || win.closed) return;
+        if(surface==='floating') {record.floatingWindow?.dispose();record.floatingWindow=null;}
+        frame.remove();record.frames[surface]=null;record.loaded[surface]=null;if(surface==='tab')record.host?.close();throw error;
+      }
+      if(record.frames[surface] !== frame || !alive || win.closed) return;
+    } else {
+      record.frames[surface].style.display='block';await record.loaded[surface];
+      await record.frames[surface].contentWindow.ConceptPanel.open(initial);
+    }
+    if(surface==='tab' && select) record.host.ensure({select:true});
+    syncFloating(record);notify();return record.frames[surface];
+  }
+  const tabObserver=Zotero.Notifier.registerObserver({notify(event,type,ids) {
+    if(type!=='tab' || event!=='select')return;
+    for(const record of windows.values()) {
+      if(!record.win.Zotero_Tabs)continue;
+      syncFloating(record);
+      try {void record.frames.tab?.contentWindow?.ConceptPanel?.visibilityChanged(record.host?.selected()).catch(() => {});}catch {}
+    }
+  }},['tab'],id+'-tabs');
+  function selectionContext(doc,annotation) {
+    const selected=String(annotation?.text ?? '').trim();
+    const docs=[doc];
+    for (const iframe of doc?.querySelectorAll('iframe') ?? []) { try { if (iframe.contentDocument) docs.push(iframe.contentDocument); } catch {} }
+    for (const current of docs) {
+      const selection=current.defaultView?.getSelection();
+      if (!selection || !selection.toString().trim()) continue;
+      let element=selection.anchorNode?.nodeType === 1 ? selection.anchorNode : selection.anchorNode?.parentElement;
+      element=element?.closest('.textLayer,p,article') ?? element;
+      const text=element?.textContent?.replace(/\s+/g,' ').trim() ?? '';
+      if (text) {
+        const pos=text.indexOf(selected);
+        return text.slice(Math.max(0,pos-1200),Math.max(0,pos)+selected.length+1800);
+      }
+    }
+    return selected;
+  }
+  async function explainSelection(reader,annotation,doc) {
+    const win=reader?._window ?? Zotero.getMainWindow();
+    try {
+      requireStore();
+      const selected=String(annotation?.text ?? '').trim();
+      if (!selected) throw new Error(t("readerSelectionRequired"));
+      if (selected.length > 1200) throw new Error(t("selectionTooLong"));
+      const attachment=Zotero.Items.get(reader.itemID);
+      const item=attachment?.parentItem ?? attachment;
+      if (!attachment || !item) throw new Error(t("attachmentUnknown"));
+      const document=await store.registerDocument({libraryId:attachment.libraryID,itemKey:item.key,attachmentKey:attachment.key,title:item.getField('title') || reader._title || selected});
+      const page=annotation?.position?.pageIndex;
+      const node=await store.createSession({documentId:document.id,concept:selected,source:{selectedText:selected,context:selectionContext(doc,annotation),location:{pageIndex:Number.isSafeInteger(page) && page >= 0 ? page : null}}});
+      await showPanel(win,'reading',{surface:'floating'}); notify(); void generate(node.id); return node;
+    } catch (error) {
+      await showPanel(win,'reading');
+      reportError(win,error);
+      return null;
+    }
+  }
+  const selectionHandler=event => {
+    if (!alive) return;
+    const {reader,doc,params,append}=event;
+    const selected=String(params?.annotation?.text ?? '').trim(); if (!selected) return;
+    const win=reader._window ?? Zotero.getMainWindow(); addWindow(win);
+    windows.get(win).selection={reader,annotation:plain(params.annotation),doc};
+    const button=doc.createElement('button');
+    button.dataset.conceptExplorerLabel='explainConcept';button.dataset.conceptExplorerTitle='explainConceptTitle';button.textContent=t("explainConcept"); button.className='concept-explorer-reader-button';
+    button.setAttribute('type','button'); button.title=t("explainConceptTitle");
+    button.style.cssText='padding:7px 11px;margin:4px;border:1px solid #8faab4;border-radius:7px;font:inherit;color:#126c70;background:#f0f9f7;cursor:pointer;';
+    button.addEventListener('click',event => { event.preventDefault(); void explainSelection(reader,params.annotation,doc); });
+    trackNode(button); append(button);
+  };
+  const toolbarHandler=event => {
+    if (!alive) return;
+    const button=event.doc.createElement('button');button.dataset.conceptExplorerLabel='knowledge';button.dataset.conceptExplorerTitle='menuTree'; button.textContent=t("knowledge"); button.title=t("menuTree");
+    button.setAttribute('type','button'); button.className='toolbar-button';
+    button.style.cssText='font:inherit;font-size:12px;padding:0 8px;color:inherit;';
+    button.addEventListener('click',() => openSafely(event.reader._window ?? Zotero.getMainWindow(),'knowledge'));
+    trackNode(button); event.append(button);
+  };
+  Zotero.Reader.registerEventListener('renderTextSelectionPopup',selectionHandler,id);
+  Zotero.Reader.registerEventListener('renderToolbar',toolbarHandler,id);
+  for (const win of Zotero.getMainWindows()) addWindow(win);
+  const api={version,store,storage,snapshot,showPanel,explainSelection,addWindow,removeWindow,
+    async shutdown() {
+      if (!alive) return;
+      alive=false;
+      shutdownHandle.run=null;
+      for (const job of jobs.values()) { job.cancelled=true; try { job.cancel?.(); } catch {} }
+      for (const record of windows.values()) { try { await flushRecord(record); } catch {} }
+      if (store) await store.flush();
+      Zotero.Notifier.unregisterObserver(tabObserver);
+      for (const win of [...windows.keys()]) removeWindow(win);
+      // Persist the host's normal tab session after removing only our own UI.
+      await Zotero.Session?.save();
+      eventNodes.removeAll();
+      // Zotero removes pluginID listeners on shutdown. Its manual unregister API is not used.
+      if (Zotero.ConceptExplorer === api) delete Zotero.ConceptExplorer;
+    }
+  };
+  const shutdownHandle={run:() => api.shutdown()};
+  Zotero.addShutdownListener(() => shutdownHandle.run?.());
+  Zotero.ConceptExplorer=api;
+  if(prefGet('workspaceTabOpen') && store) {
+    const win=Zotero.getMainWindow();
+    if(win) void showPanel(win,store.snapshot().workspace.view==='knowledge' ? 'knowledge' : 'reading',{surface:'tab',select:false}).catch(error => reportError(win,error));
+  }
+  return api;
+}

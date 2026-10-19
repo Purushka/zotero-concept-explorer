@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "概念探索 · Concept Explorer",
+  "version": "0.2.8",
+  "description": "选词解释浮窗、递归概念页面与持久化知识树。",
+  "author": "Concept Explorer",
+  "applications": {
+    "zotero": {
+      "id": "concept-explorer@local.research",
+      "strict_min_version": "8.0",
+      "strict_max_version": "10.*",
+      "update_url": "https://concept-explorer.invalid/updates.json"
+    }
+  }
+}

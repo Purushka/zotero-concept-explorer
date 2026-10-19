@@ -1,0 +1,72 @@
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+import {createHash} from 'node:crypto';
+import assert from 'node:assert/strict';
+import JSZip from 'jszip';
+const root=resolve(import.meta.dirname,'..');
+const version=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
+const original=resolve(root,'../dist/concept-explorer-0.2.3.xpi');
+const bytes=await readFile(original),sha=data=>createHash('sha256').update(data).digest('hex');
+assert.equal(sha(bytes),'ed85199c04027e1ac459ac86afe357f6710345e9b5300cb1ed0079cf1fd1b709');
+const zip=await JSZip.loadAsync(bytes),changed=[],unchanged=[];
+const read=name=>readFile(join(root,name),'utf8'),before=name=>zip.file('source/'+name).async('string');
+for(const entry of Object.values(zip.files)) if(entry.name.startsWith('source/') && !entry.dir) {
+  const name=entry.name.slice(7),baseline=await entry.async('nodebuffer'),current=await readFile(join(root,name));
+  if(baseline.equals(current))unchanged.push(name);else changed.push(name);
+}
+assert.deepEqual([...changed].sort(),['addon/content/panel.css','addon/content/panel.html','addon/manifest.json','package.json','scripts/build.mjs','src/knowledge-tree-store.mjs','src/panel.mjs','src/runtime.mjs','tests/ui-checks.cjs','vendor/NOTICE.md'].sort());
+function replaceOnce(source,old,next) {
+ assert(source.includes(old),'Expected allowed patch absent: '+old.slice(0,90));
+ assert.equal(source.indexOf(old),source.lastIndexOf(old),'Patch anchor is ambiguous');
+ return source.replace(old,next);
+}
+function replaceSection(source,start,end,next) {
+ const a=source.indexOf(start),b=source.indexOf(end,a+start.length);
+ assert(a>=0 && b>a,'Missing section anchors: '+start);
+ assert.equal(a,source.lastIndexOf(start),'Ambiguous section: '+start);
+ return source.slice(0,a)+next+source.slice(b);
+}
+let expected=await before('src/knowledge-tree-store.mjs');
+expected=expected.replace("import pLimit from '../vendor/p-limit.mjs';", "import pLimit from '../vendor/p-limit.mjs';\nimport {validGeneration} from './archive-generation.mjs';");
+expected=expected.replace("'view','createdAt','updatedAt'], 'session'", "'view','createdAt','updatedAt','generation'], 'session'");
+expected=expected.replace('    nodes.set(node.id,node);', "    if (node.generation !== undefined) check(validGeneration(node.generation), 'invalid generation metadata');\n    nodes.set(node.id,node);");
+expected=expected.replace('      Object.assign(node.explanation,captured); node.updatedAt = this.#clock();', "      Object.assign(node.explanation,captured);\n      // Invalidate only metadata for replaced text, never remove existing answers or branches.\n      for (const part of ['summary','detail']) if (part in captured && node.generation) delete node.generation[part];\n      if (node.generation && !Object.keys(node.generation).length) delete node.generation;\n      node.updatedAt = this.#clock();");
+const store=replaceSection(await read('src/knowledge-tree-store.mjs'),'  #deletionPlan(state, nodeId) {','  setExplanation(nodeId, patch) {','');
+assert.equal(store,expected,'Store changed outside deletion and metadata-compatibility patches');
+const originalRuntime=await before('src/runtime.mjs');
+let runtime=await read('src/runtime.mjs');
+runtime=replaceOnce(runtime,"import {createFloatingWindow} from './floating-window.mjs';\n",'');
+runtime=replaceOnce(runtime,"    record.floatingWindow?.setVisible(false);\n",'');
+runtime=replaceOnce(runtime,"    record.floatingWindow?.setVisible(visible);\n",'');
+runtime=replaceOnce(runtime,"    record.floatingWindow?.dispose();\n",'');
+runtime=replaceOnce(runtime,'uri,initialize:async content => {','uri,initialize:content => {');
+runtime=replaceSection(runtime,'        await content.ConceptPanel.init(initial,{surface});','      }});',"        return content.ConceptPanel.init(initial,{surface});\n");
+runtime=replaceOnce(runtime,"        if(surface==='floating') {record.floatingWindow?.dispose();record.floatingWindow=null;}\n",'');
+runtime=replaceOnce(runtime,"import {deleteSessionWithConfirmation,confirmSessionDeletion} from './session-deletion.mjs';\n",'');
+runtime=replaceOnce(runtime,'[...jobs].filter(([nodeId]) => archive?.nodes.some(node => node.id === nodeId)).map','[...jobs].map');
+const mutationStart='  async function mutate(action,args=[]) {',mutationEnd='  async function navigateOriginal(nodeId) {';
+runtime=replaceSection(runtime,mutationStart,mutationEnd,originalRuntime.slice(originalRuntime.indexOf(mutationStart),originalRuntime.indexOf(mutationEnd)));
+runtime=replaceSection(runtime,'          deleteSession:async nodeId => {','          child:async (...args) => {','');
+assert.equal(runtime,originalRuntime,'Runtime changed outside deletion bridge/status/stale-save patches');
+let panel=await read('src/panel.mjs');
+panel=replaceOnce(panel,'  if (!nodeById(nodeId)) return;\n','');
+panel=replaceOnce(panel,'    if (!nodeById(nodeId)) { if (dirty.get(nodeId) === patch) dirty.delete(nodeId); continue; }\n','');
+panel=replaceOnce(panel,",['删除节点','delete-node','danger']",'');
+panel=replaceSection(panel,"      const row=element('div',null,'tree-row');",'      row.append(b,remove);tree.append(row);','      tree.append(b);');
+panel=replaceOnce(panel,'      tree.append(b);      row.append(b,remove);tree.append(row);','      tree.append(b);');
+panel=replaceSection(panel,'async function update(value) {','async function loadSettings() {','async function update(value) { state=value;render(); }\n');
+panel=replaceSection(panel,"      case 'delete-node': {","      case 'cancel':",'');
+assert.equal(panel,await before('src/panel.mjs'),'Panel changed outside deletion actions/cache cleanup');
+let html=await read('addon/content/panel.html');
+html=replaceOnce(html,'  <script src="vendor/interact.js" defer></script>\n','');
+html=replaceOnce(html,'<br>点「删除」可移除节点或整条分支。','');
+assert.equal(html,await before('addon/content/panel.html'));
+const css=await read('addon/content/panel.css'),cssAnchor='/* Separate row actions: deletion never activates the concept navigation button. */';
+assert(css.includes(cssAnchor));assert.equal(css.slice(0,css.indexOf(cssAnchor)).trimEnd(),(await before('addon/content/panel.css')).trimEnd(),'CSS changed outside deletion styles');
+const ui=(await read('tests/ui-checks.cjs')).replaceAll('#tree .tree-node[data-id=','#tree [data-id=');
+assert.equal(ui,await before('tests/ui-checks.cjs'),'Original UI checks changed outside navigation selectors');
+const report={version,baseline:'0.2.3',baselineSHA256:sha(bytes),byteIdenticalOriginalFiles:unchanged.length,changedOriginalFiles:changed,normalizedRuntimeIdentical:true,normalizedPanelIdentical:true,normalizedStoreIdentical:true,originalContextPromptAndStreamingUnchanged:true,archiveSchema:1,allowedFeature:'Host-clamped draggable four-edge floats with preference-only persistence; confirmed atomic node/subtree deletion; child promotion, cross-surface cleanup, deleted-job abort and stale-view guards',behaviorSourceHashes:{}};
+for(const name of unchanged.filter(name=>name.startsWith('src/')))report.behaviorSourceHashes[name]=sha(await readFile(join(root,name)));
+await mkdir(join(root,'.test-artifacts'),{recursive:true});
+await writeFile(join(root,'.test-artifacts','baseline-audit-'+version+'.json'),JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify({version,baseline:report.baseline,unchanged:unchanged.length,changed,originalModelBehaviorPreserved:true}));

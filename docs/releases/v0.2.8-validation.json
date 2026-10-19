@@ -1,0 +1,57 @@
+{
+  "version": "0.2.8",
+  "date": "2026-10-19",
+  "repository": "https://github.com/Purushka/zotero-concept-explorer",
+  "package": {
+    "file": "concept-explorer-0.2.8.xpi",
+    "bytes": 2599091,
+    "sha256": "ed8ed352fe8d7ebde3700e5e33d4f37c471b4146e515e197b10b05511fde1136",
+    "sourceIncluded": true,
+    "thirdPartyLicensesIncluded": true
+  },
+  "compatibility": {
+    "declaredZotero": "8–10",
+    "testedHost": "Windows / Zotero 10.0.6",
+    "otherHostsVerified": false
+  },
+  "checks": {
+    "node": 121,
+    "chromium": {
+      "reading": 32,
+      "deletion": 12,
+      "floating": 17,
+      "localization": 5,
+      "total": 66
+    },
+    "native": {
+      "first": 22,
+      "restart": 7,
+      "total": 29
+    },
+    "model": "Synthetic localhost SSE, dummy credentials only",
+    "realProviderOrAnswerQualityVerified": false,
+    "userProfileModified": false
+  },
+  "languageOptions": [
+    "auto",
+    "zh-CN",
+    "zh-TW",
+    "en-US"
+  ],
+  "logoRemoved": true,
+  "updates": "manual",
+  "runtimeAssets": {
+    "content/panel.js": "7f843500ea37065b938d4eb2b5aa71431fc925649f82cafd89fb8e1aee8a9cf3",
+    "content/runtime.js": "a2fd57a5516f98f3e10c1457b1aa2b427beb5915f7745782e1d6d9e0eb077bf4",
+    "content/panel.css": "1fb12f1daa1fa61a5abab7a1d84206b84d9d68f70e32e5def847ce848872662a",
+    "content/panel.html": "e14560b3468ee0205d23004ab151e04c54df00b48aa568a26905991d55898eaf"
+  },
+  "runtimeMatchesPreviouslyValidatedLanguageRelease": true,
+  "publicationChanges": "Public Chinese/English README, screenshots, release notes, configurable development test paths, clean standalone repository layout",
+  "privacy": {
+    "sourceAllowlistReviewed": true,
+    "workingProfilesOrArchivesIncluded": false,
+    "credentialPatternsFound": false,
+    "localUserPathsFound": false
+  }
+}
