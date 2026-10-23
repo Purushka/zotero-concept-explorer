@@ -8,12 +8,16 @@ export async function deleteSessionWithConfirmation({store,nodeId,jobs,confirm})
   if (mode === null) return null;
   if (!['node','subtree'].includes(mode)) throw new Error('Unknown deletion mode');
   const result = await store.deleteSession(nodeId,{mode,expectedNodeIds:mode === 'subtree' ? plan.nodeIds : [nodeId]});
-  for (const id of result.deletedNodeIds) {
+  cancelDeletedJobs(jobs,result.deletedNodeIds);
+  return result;
+}
+
+export function cancelDeletedJobs(jobs,deletedNodeIds) {
+  for (const id of deletedNodeIds) {
     const job = jobs.get(id);
     if (job) { job.cancelled = true; try { job.cancel?.(); } catch {} }
     jobs.delete(id);
   }
-  return result;
 }
 
 export function confirmSessionDeletion(Zotero,window,plan,localizer=createLocalizer()) {

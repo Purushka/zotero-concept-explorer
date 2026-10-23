@@ -35,7 +35,7 @@ try{
   }
   # Zotero's Windows launcher may exit after spawning its host. Completion comes from the exact isolated profile, not the starter PID.
   $starter=Start-Process -FilePath $zotero -ArgumentList @('-no-remote','-profile',('"'+$root+'\profile"'),'-datadir',('"'+$root+'\data"'),'-purgecaches','-ZoteroDebugText') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $root ($phase+'.out.log')) -RedirectStandardError (Join-Path $root ($phase+'.err.log'))
-  $launched=$true;$complete=Join-Path $root ($phase+'.complete.json');$failure=Join-Path $root 'failed.json';$deadline=[DateTime]::UtcNow.AddMinutes(3)
+  $launched=$true;$complete=Join-Path $root ($phase+'.complete.json');$failure=Join-Path $root 'failed.json';$deadline=[DateTime]::UtcNow.AddMinutes(5)
   while(-not(Test-Path -LiteralPath $complete)){
    if(Test-Path -LiteralPath $failure){$details=Get-Content -LiteralPath $failure -Raw -Encoding UTF8 | ConvertFrom-Json;throw ($details.message+' '+$details.stack)}
    if([DateTime]::UtcNow -gt $deadline){throw ('Timed out: '+$phase)}

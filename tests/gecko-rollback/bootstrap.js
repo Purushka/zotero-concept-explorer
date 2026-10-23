@@ -1,5 +1,6 @@
 // Never installed in a real profile. All papers, answers and Keys are synthetic.
 var watcher;
+const formulaText=__MATH_JSON__;
 const ROOT=__ROOT_JSON__,local=n=>PathUtils.join(ROOT,n),DATA=local('data');
 function install(){}function uninstall(){}function shutdown(){if(watcher)clearInterval(watcher);}
 function startup(){setTimeout(()=>void run().catch(async e=>{await IOUtils.writeJSON(local('failed.json'),{message:String(e),stack:e.stack});}),1000);}
@@ -59,6 +60,7 @@ async function run(){
   assert((await calls()).length===before+1 && api.store.getSession(repeat.id).explanation.detail,'Restored baseline unexpectedly reused cached explanation or delayed detail');
   same(prompt((await calls()).at(-1)).nearbyText,root.source.context,'Restart request clipped context');
   await pass('Same article/concept after restart makes one fresh combined request with unchanged context');
+  await nativeAnnotationRestartChecks({api,addon,pass,wait,calls,assert,same});
   await complete();return;
  }
  for(const node of legacy.nodes)same(api.store.getSession(node.id),node,'Failed to read legacy archive unchanged');
@@ -79,7 +81,7 @@ async function run(){
  let root;
  for(const protocol of ['chat','responses','anthropic']){
   await save(protocol);tabs.select(reader.tabID);selectReaderContext();const before=(await calls()).length;
-  root=await api.explainSelection(reader,{text:'Posterior distribution',position:{pageIndex:0}},readerDoc);assert(root,'Reader failed to create session');
+  root=await api.explainSelection(reader,{text:'Posterior distribution',pageLabel:'1',sortIndex:'00000|'+String(['chat','responses','anthropic'].indexOf(protocol)).padStart(6,'0')+'|00040',position:{pageIndex:0,rects:[[30,40+['chat','responses','anthropic'].indexOf(protocol)*20,180,55+['chat','responses','anthropic'].indexOf(protocol)*20]]}},readerDoc);assert(root,'Reader failed to create session');
   await wait(()=>job(root.id)?.status==='loading' && job(root.id)?.preview?.summary?.includes('测试简述') && fd()?.querySelector('.stream-preview')?.textContent?.includes('测试简述'),'stream preview '+protocol);
   assert(!api.store.getSession(root.id).explanation.summary && !api.store.getSession(root.id).explanation.detail,'Partial text saved prematurely');
   let recorded=await calls();assert(recorded.length===before+1 && !recorded.at(-1).completed && recorded.at(-1).combined,'Preview waited for completion or prompt is not original JSON pair');
@@ -225,6 +227,8 @@ async function run(){
   await pass('Native deletion results and untouched branch persist in the atomic archive for process restart');
  } finally {Zotero.Prompt.confirm=originalConfirm;api.storage.write=originalWrite;await mode('normal');}
 
+ await nativeFormulaAnnotationChecks({api,win,tabs,reader,readerDoc,attachment,item,bridge,nd,fd,floatFrame,calls,mode,job,finished,pass,wait,pause,assert,same,root,child});
+ await IOUtils.writeJSON(local('restart-expected.json'),api.store.snapshot());
  await bridge().saveLanguage('en-US');
  await pass('English language preference saved for independent process restart');
  await complete();

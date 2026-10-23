@@ -8,7 +8,7 @@
 
 ## 安装
 
-1. 打开 [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest)，在 **Assets** 中下载 `concept-explorer-0.2.8.xpi`。
+1. 打开 [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest)，在 **Assets** 中下载 `concept-explorer-0.2.9.xpi`。
 2. 在 Zotero 中打开 **工具 → 插件**，将 `.xpi` 文件拖入插件窗口，或在齿轮菜单选择「从文件安装插件」。
 3. 重启 Zotero，打开 **工具 → 概念探索 · 模型设置**。
 
@@ -37,9 +37,23 @@
 2. 先在小浮窗阅读简述，需要时点击 **在标签页展开** 查看详细解释。一次流式请求生成简述和详情，展开本身不会另发详情请求。
 3. 点击解释里标记的概念，或在 AI 解释、AI 追问回答中划词，继续创建子概念。父层页面和子分支都会保留。
 4. 在输入框继续追问；`Ctrl/Cmd+Enter` 可发送问题。不同概念独立保存对话、草稿和阅读位置。
-5. 点击 **知识树** 回看历史，点击 **阅读** 恢复阅读现场。已有解释可以离线查看。
+5. 选段提问后，原文会保留 Zotero 高亮。点击高亮或阅读器侧栏中的批注可恢复已保存的对话；也可在侧栏使用 **查看对话**，不会因此重新请求模型。
+6. 点击 **知识树** 回看历史，点击 **阅读** 恢复阅读现场。已有解释可以离线查看。
 
 生成中的内容会作为临时预览显示，完整结束后才保存。停止、断流或服务报错时，原有完整解释和问题仍会保留。解释质量取决于所选模型与提供的上下文，重要结论请回到论文核对。
+
+## 公式与原文高亮
+
+原文选段、简述、详细解释、追问消息及模型回答都支持公式。输入框下方会实时预览公式，发送时保留原始 TeX。例如：
+
+- 行内公式：`$S(x,y)=-\lVert x-y\rVert_2$`。
+- 独立公式：用 `$$` 包裹 TeX，例如 `$$\mathcal{L}=-\sum_{b=1}^{B}\log p_b$$`。
+
+预览和输出使用本地 KaTeX 渲染，支持分式、求和、上下标等常见写法；长公式可横向滚动。模型被要求保留完整 TeX。如果 PDF 文本抽取时已经丢失分数线、上下标或符号，插件无法从残缺文本可靠还原；可在追问中补入正确的 TeX。渲染失败时保留公式源码。
+
+新提问会建立或复用同一选区的原生高亮，并与对话关联。重复解释同一选区会打开已有会话，已有批注文字与评论会保留。高亮和对话在重启后仍可回看。需要可编辑的 PDF 批注权限；只有旧文本而没有选区坐标的历史记录不会自动补建高亮。
+
+在 Zotero 中删除高亮，也会删除关联会话、其后代分支、追问及草稿，并取消其中正在生成的回答。插件停用期间删除的高亮会在重新启用时检查并清理对应会话。删除无法一键撤销；重要记录请先备份。
 
 ## 语言与浮窗
 
@@ -78,7 +92,7 @@ pnpm test
 pnpm build
 ```
 
-构建结果位于 `dist/concept-explorer-0.2.8.xpi`，包含可编辑源码和第三方许可证。构建脚本会保留已有安装包；开发阶段只有确认是未发布测试包时才使用 `node scripts/build.mjs --replace-test-build`。
+构建结果位于 `dist/concept-explorer-0.2.9.xpi`，包含可编辑源码和第三方许可证。构建脚本会保留已有安装包；开发阶段只有确认是未发布测试包时才使用 `node scripts/build.mjs --replace-test-build`。
 
 浏览器回归需要单独安装 Playwright 和 Chromium。测试默认从项目解析 `playwright`，也可通过 `PLAYWRIGHT_MODULE_PATH` 指定已安装的 Playwright 模块，通过 `CHROMIUM_EXECUTABLE_PATH` 指定浏览器：
 
@@ -87,11 +101,12 @@ pnpm test:ui
 pnpm test:deletion-ui
 pnpm test:floating-ui
 pnpm test:language-ui
+pnpm test:formula-ui
 ```
 
 Windows 原生测试入口为 `node tests/gecko-rollback/run-isolated.mjs`，可通过 `ZOTERO_EXECUTABLE` 指定 Zotero。该测试使用独立临时 profile、虚构文献、假 Key 和本地模拟接口，不使用日常文献库。
 
-0.2.8 的功能验证包括 **121 项 Node 测试、66 项 Chromium 检查、29 项 Zotero 原生检查**。这些验证不代表真实付费 API 的可用性或模型回答质量。发布记录见 [0.2.8](docs/releases/v0.2.8.md)；验证范围见 [VALIDATION.md](VALIDATION.md)。
+0.2.9 的功能验证包括 **133 项 Node 测试、70 项 Chromium 检查、34 项 Zotero 原生检查**。原生检查包含完整进程重启、批注侧栏点击恢复、删除高亮与取消生成，以及停用期间删除后的清理；PDF 画布点击回退路径由 Chromium 检查覆盖。这些验证不代表真实付费 API 的可用性或模型回答质量。发布记录见 [0.2.9](docs/releases/v0.2.9.md)；验证范围见 [VALIDATION.md](VALIDATION.md)。
 
 ## 许可证与复用
 

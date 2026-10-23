@@ -56,3 +56,16 @@ is retained in `i18next.LICENSE`. Both bootstrap and panel bundles use this
 local copy with bundled translations, no runtime CDN, detector or backend.
 Language preference is independent of API credentials and knowledge-tree data.
 Rollback: install 0.2.7; that version ignores the independent language preference.
+
+## Native annotations and Gecko math (0.2.9)
+
+Highlight creation and deletion use Zotero's native Annotations.saveFromJSON and
+item eraseTx APIs. Reader restoration uses navigate({annotationID}) and the
+Reader's selected-annotation state. The upstream interface was reviewed in
+https://github.com/zotero/zotero/tree/10.0/chrome/content/zotero/xpcom and checked
+against the installed Zotero 10.0.6 sources; no host source is copied or bundled.
+The existing p-limit(1) queue serializes highlight/session operations.
+The existing unmodified texmath parser and KaTeX distribution also serve the
+source and input previews; src/safe-markdown.mjs hydrates escaped math placeholders
+with KaTeX's render API instead of injecting KaTeX HTML into privileged Gecko.
+No additional runtime dependency, CDN or model service is introduced.

@@ -47,3 +47,11 @@ test('prompt describes only the selected concept and raw errors never disclose a
   assert.doesNotMatch(error,/secret|Bearer/); assert.match(error,/认证/);
   assert.match(friendlyHTTPError({status:302}),/重定向/);
 });
+
+test('explanation and conversation prompts request distinct display-math delimiters',async()=>{
+  const {conversationMessages}=await import('../src/model-adapter.mjs');
+  const node={concept:'R3M',source:{selectedText:'InfoNCE',context:'Paper'},explanation:{summary:'',detail:''},messages:[]};
+  for(const messages of [explanationMessages(node,{title:'R3M'},[]),conversationMessages(node,'Explain $z_i^b$')]) {
+    assert.ok(messages[0].content.includes('独立公式用 $$...$$'));assert.ok(messages[0].content.includes('行内公式用 $...$'));
+  }
+});

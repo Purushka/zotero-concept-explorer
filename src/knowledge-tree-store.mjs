@@ -219,6 +219,50 @@ export class KnowledgeTreeStore {
       return {deletedNodeIds,reparentedNodeIds,documentId:plan.documentId,mode};
     });
   }
+  sessionsForAnnotation({libraryId,attachmentKey,annotationKey}) {
+    const documents=new Set(this.#state.documents.filter(doc=>doc.identity.libraryId===libraryId && doc.identity.attachmentKey===attachmentKey).map(doc=>doc.id));
+    return clone(this.#state.nodes.filter(node=>documents.has(node.documentId) && node.source.location.annotationKey===annotationKey));
+  }
+  linkSessionAnnotation(nodeId,annotationKey) {
+    if(!/^[A-Z0-9]{8}$/.test(annotationKey))return Promise.reject(new Error('Invalid annotation key'));
+    return this.#mutate(state=>{
+      const plan=this.#deletionPlan(state,nodeId),ids=new Set(plan.nodeIds),now=this.#clock();
+      for(const node of state.nodes)if(ids.has(node.id) && node.source.location.annotationKey===null) {
+        node.source.location.annotationKey=annotationKey;node.updatedAt=now;
+      }
+      return this.#node(state,nodeId);
+    });
+  }
+  deleteAnnotationSessions(identities) {
+    const captured=clone(identities);
+    if(!Array.isArray(captured) || captured.some(ref=>!Number.isSafeInteger(ref.libraryId) || ref.libraryId<0 || !/^[A-Z0-9]{8}$/.test(ref.attachmentKey) || !/^[A-Z0-9]{8}$/.test(ref.annotationKey)))return Promise.reject(new Error('Invalid annotation identity'));
+    return this.#mutate(state=>{
+      const documents=new Map(state.documents.map(doc=>[doc.id,doc]));
+      const roots=state.nodes.filter(node=>captured.some(ref=>{
+        const identity=documents.get(node.documentId).identity;
+        return identity.libraryId===ref.libraryId && identity.attachmentKey===ref.attachmentKey && node.source.location.annotationKey===ref.annotationKey;
+      }));
+      const removed=new Set(),byId=new Map(state.nodes.map(node=>[node.id,node]));
+      for(const root of roots)for(const nodeId of this.#deletionPlan(state,root.id).nodeIds)removed.add(nodeId);
+      const parentFor=nodeId=>{
+        let node=byId.get(nodeId);
+        while(node && removed.has(node.id))node=byId.get(node.parentId);
+        return node?.id ?? null;
+      };
+      const workspace=state.workspace,now=this.#clock();
+      workspace.openNodeIds=workspace.openNodeIds.filter(nodeId=>!removed.has(nodeId));
+      if(removed.has(workspace.pageNodeId)) {
+        workspace.pageNodeId=parentFor(workspace.pageNodeId) ?? [...workspace.openNodeIds].reverse().find(nodeId=>byId.get(nodeId)?.documentId===workspace.activeDocumentId) ?? null;
+        if(workspace.pageNodeId)byId.get(workspace.pageNodeId).view.expanded=true;
+      }
+      if(removed.has(workspace.floatingNodeId))workspace.floatingNodeId=null;
+      if(removed.has(workspace.treeSelectionId))workspace.treeSelectionId=parentFor(workspace.treeSelectionId) ?? byId.get(workspace.treeSelectionId).documentId;
+      const documentIds=[...new Set([...removed].map(nodeId=>byId.get(nodeId).documentId))];
+      for(const documentId of documentIds)documents.get(documentId).updatedAt=now;
+      state.nodes=state.nodes.filter(node=>!removed.has(node.id));
+      return {deletedNodeIds:[...removed],reparentedNodeIds:[],documentIds,mode:'subtree'};
+    });
+  }
   setExplanation(nodeId, patch) {
     const captured = clone(patch);
     keys(captured, ['summary','detail','format'], 'explanation patch');

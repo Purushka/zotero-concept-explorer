@@ -8,7 +8,7 @@ Understand unfamiliar concepts while reading papers in Zotero. Select text for a
 
 ## Install
 
-1. Open [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest) and download `concept-explorer-0.2.8.xpi` from **Assets**.
+1. Open [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest) and download `concept-explorer-0.2.9.xpi` from **Assets**.
 2. In Zotero, open **Tools → Plugins**. Drag the `.xpi` into that window, or choose **Install Plugin From File** from its gear menu.
 3. Restart Zotero and open **Tools → Concept Explorer · Model settings**. Menu labels follow the selected language.
 
@@ -37,9 +37,23 @@ Remote APIs require HTTPS; loopback services may use HTTP. A Responses root URL 
 2. Read the summary in a popover, then expand it into a native Zotero tab. One streaming request generates both summary and detail; expanding the view does not send another detail request.
 3. Click a marked concept, or select text in an AI explanation or answer, to create a child concept. Parent pages and child branches remain available.
 4. Ask follow-up questions. `Ctrl/Cmd+Enter` sends a question. Each concept retains its own conversation, draft, and scroll position.
-5. Open **Knowledge tree** to revisit earlier concepts, then **Reading** to resume. Saved explanations can be read offline.
+5. Asking about a selection retains a native Zotero highlight. Click the highlight or its annotation sidebar card to restore the saved conversation. The sidebar also offers **View conversation**; reopening does not make another model request.
+6. Open **Knowledge tree** to revisit earlier concepts, then **Reading** to resume. Saved explanations can be read offline.
 
 Streaming output is a temporary preview until it completes. Cancellation, interrupted output, or service errors preserve existing complete explanations and questions. Answer quality depends on the model and supplied context; check important claims against the paper.
+
+## Formulas and source highlights
+
+Source selections, summaries, detailed explanations, follow-up messages, and model answers support math. The question editor shows a live formula preview and sends the original TeX. For example:
+
+- Inline: `$S(x,y)=-\lVert x-y\rVert_2$`.
+- Display: wrap TeX in `$$`, such as `$$\mathcal{L}=-\sum_{b=1}^{B}\log p_b$$`.
+
+Bundled KaTeX renders fractions, sums, subscripts, superscripts, and other common notation. Long equations scroll horizontally. Model instructions request complete TeX. Symbols, fraction structure, or superscripts already lost during PDF text extraction cannot be reconstructed reliably; supply corrected TeX in a follow-up when necessary. Failed rendering preserves the formula source.
+
+A new question creates or reuses a native highlight for the same selection and links it to its conversation. Repeating the selection restores the existing session and preserves annotation text and comments. Highlights and conversations survive restart. Annotation editing must be allowed for the PDF. Older text-only records without selection coordinates do not receive highlights retroactively.
+
+Deleting a highlight in Zotero also deletes its linked conversations and descendant branches, including follow-ups and drafts, and cancels their running requests. When the plugin is re-enabled, it cleans up sessions whose highlights were deleted while it was disabled. There is no one-click undo; back up important records first.
 
 ## Language and popover controls
 
@@ -78,7 +92,7 @@ pnpm test
 pnpm build
 ```
 
-The output is `dist/concept-explorer-0.2.8.xpi`, including editable source and third-party licenses. Existing packages are preserved; use `node scripts/build.mjs --replace-test-build` only for an unpublished development build.
+The output is `dist/concept-explorer-0.2.9.xpi`, including editable source and third-party licenses. Existing packages are preserved; use `node scripts/build.mjs --replace-test-build` only for an unpublished development build.
 
 Browser checks require a separate Playwright and Chromium installation. Tests resolve `playwright` from the project by default. `PLAYWRIGHT_MODULE_PATH` and `CHROMIUM_EXECUTABLE_PATH` can select existing installations.
 
@@ -87,11 +101,12 @@ pnpm test:ui
 pnpm test:deletion-ui
 pnpm test:floating-ui
 pnpm test:language-ui
+pnpm test:formula-ui
 ```
 
 On Windows, `node tests/gecko-rollback/run-isolated.mjs` runs the isolated native harness. Set `ZOTERO_EXECUTABLE` if needed. It uses a disposable profile, synthetic papers, dummy credentials, and a localhost mock service.
 
-Version 0.2.8's feature validation includes **121 Node tests, 66 Chromium checks, and 29 native Zotero checks**. These do not establish paid-provider availability or real-model answer quality. See the [release notes](docs/releases/v0.2.8.md) and [validation scope](VALIDATION.md).
+Version 0.2.9's feature validation includes **133 Node tests, 70 Chromium checks, and 34 native Zotero checks**. Native coverage includes process restart, annotation sidebar clicks, highlight deletion, generation cancellation, and cleanup after deletion while disabled. The PDF canvas click fallback is covered in Chromium. These do not establish paid-provider availability or real-model answer quality. See the [release notes](docs/releases/v0.2.9.md) and [validation scope](VALIDATION.md).
 
 ## License and reused components
 

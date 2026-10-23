@@ -1,6 +1,6 @@
 import {createLocalizer,translateDOM} from './localization.mjs';
 import {captureExplanationSelection} from './explanation-selection.mjs';
-import {createSafeMarkdown} from './safe-markdown.mjs';
+import {createSafeMarkdown,hydrateMath} from './safe-markdown.mjs';
 import {endpointFor} from './model-adapter.mjs';
 import {recoverExplanation,normalizeAnswer} from './explanation-format.mjs';
 const l10n=createLocalizer();
@@ -38,12 +38,18 @@ document.addEventListener('pointerdown',event=>{if(event.target.closest?.('[data
 document.addEventListener('scroll',hideSelection,true);
 document.addEventListener('keydown',event=>{if(event.key==='Escape')hideSelection();});
 function element(tag,text,className) { const result=document.createElement(tag); if (text != null) result.textContent=text; if (className) result.className=className; return result; }
-function renderMarkdown(container,text) {
-  container.innerHTML=markdown(text);
+function renderMarkdown(container,text,inline=false) {
+  container.innerHTML=inline ? markdown.inline(text) : markdown(text);
+  hydrateMath(container,window.katex);
   // Hydrate only placeholders emitted by markdown-it; model HTML remains disabled.
   for (const token of container.querySelectorAll('span.concept-token')) {
     const button=element('button',token.textContent,'concept-link');button.type='button';button.dataset.concept=token.textContent;token.replaceWith(button);
   }
+}
+function updateComposerPreview(article) {
+  const preview=article.querySelector('.composer-preview'),body=preview.querySelector('.preview-content');
+  renderMarkdown(body,article.querySelector('textarea').value);
+  preview.hidden=!body.querySelector('.katex,.katex-error,.math-error');
 }
 function showError(message) { $('#notice').textContent=l10n.message(message); $('#notice').hidden=false; $('#save-status').textContent=t("saveError"); }
 function info(message) { $('#notice').textContent=l10n.message(message); $('#notice').hidden=false; }
@@ -90,9 +96,12 @@ function createArticle(node) {
   }
   const form=element('form',null,'composer'),input=element('textarea'),send=element('button',t("send"),'primary');
   input.dataset.i18nAriaLabel='followupLabel';input.dataset.i18nPlaceholder='followupPlaceholder';send.dataset.i18n='send';input.setAttribute('aria-label',t("followupLabel"));input.placeholder=t("followupPlaceholder");input.rows=1;send.type='submit';
-  form.append(input,send);article.append(header,body,form);
+  const preview=element('div',null,'composer-preview');preview.hidden=true;
+  const previewLabel=element('small',t('formulaPreview'));previewLabel.dataset.i18n='formulaPreview';
+  preview.append(previewLabel,element('div',null,'preview-content'));
+  form.append(preview,input,send);article.append(header,body,form);
   article.querySelector('textarea').value=node.view.draft;
-  article.querySelector('textarea').addEventListener('input',event => queueView(node.id,{draft:event.target.value}));
+  article.querySelector('textarea').addEventListener('input',event => {queueView(node.id,{draft:event.target.value});updateComposerPreview(article);});
   article.querySelector('.session-body').addEventListener('scroll',event => {
     if (!article.isConnected || bridge().isVisible?.() === false) return;
     const record=articles.get(node.id);
@@ -121,7 +130,7 @@ function createArticle(node) {
 function fillArticle(node,compact=false) {
   const record=articles.get(node.id) ?? createArticle(node);
   const a=record.article;translateDOM(a,l10n); a.classList.toggle('compact',compact); a.hidden=false;
-  a.querySelector('h1').textContent=node.concept;
+  renderMarkdown(a.querySelector('h1'),node.concept.length>100 || node.concept.includes('\n') ? t('selectionExplanation') : node.concept,true);
   const path=[]; let pointer=node;
   while (pointer) { path.unshift(pointer); pointer=nodeById(pointer.parentId); }
   const crumbs=a.querySelector('.breadcrumbs'); crumbs.replaceChildren();
@@ -169,10 +178,15 @@ function fillArticle(node,compact=false) {
       const empty=element('div',t("noExplanation"),'pending');empty.append(navigationButton(t("generate"),'retry',node.id));status.append(empty);
     }
   }
-  a.querySelector('.source').textContent=t('source',{title:docById(node.documentId)?.title || t('paper')})+(node.source.location.pageIndex === null ? '' : t('sourcePage',{page:node.source.location.pageIndex+1}))+'\n'+node.source.selectedText;
+  if(changed('source',[l10n.locale,docById(node.documentId)?.title,node.source])) {
+    const source=a.querySelector('.source');source.replaceChildren();
+    source.append(element('small',t('source',{title:docById(node.documentId)?.title || t('paper')})+(node.source.location.pageIndex===null ? '' : t('sourcePage',{page:node.source.location.pageIndex+1}))));
+    const content=element('div',null,'source-content');renderMarkdown(content,node.source.selectedText);source.append(content);
+  }
   const local=dirty.get(node.id);
   if (local && Object.hasOwn(local,'draft')) a.querySelector('textarea').value=local.draft;
   else if (document.activeElement !== a.querySelector('textarea')) a.querySelector('textarea').value=node.view.draft;
+  updateComposerPreview(a);
   a.querySelector('.composer button').disabled=job?.status === 'loading';
   a.querySelector('[data-action=parent]').disabled=!node.parentId && !compact;
   a.querySelector('.close').hidden=!compact;
@@ -364,7 +378,7 @@ window.addEventListener('beforeunload',() => { void flushViews().catch(() => {})
 document.addEventListener('visibilitychange',() => { if (document.hidden) void flushViews().catch(() => {}); });
 window.addEventListener('resize',() => { void positionFloating(); });
 window.ConceptPanel={
-  async init(initial='reading',options={}) { translateDOM(document,l10n);document.documentElement.lang=l10n.locale;surface=options.surface ?? 'auto'; markdown=createSafeMarkdown(window.markdownit,{conceptPlaceholders:true,katex:window.katex}); await open(initial); },
+  async init(initial='reading',options={}) { translateDOM(document,l10n);document.documentElement.lang=l10n.locale;surface=options.surface ?? 'auto'; markdown=createSafeMarkdown(window.markdownit,{conceptPlaceholders:true,mathPlaceholders:true,katex:window.katex}); await open(initial); },
   async visibilityChanged(visible) { if(!visible) {hideSelection();await flushViews();} else render(); },
   open,update,showError,flushViews
 };

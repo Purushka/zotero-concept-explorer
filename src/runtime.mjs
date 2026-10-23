@@ -7,6 +7,8 @@ import {createFloatingWindow} from './floating-window.mjs';
 export {omitOwnStartupTabs} from './native-tab-host.mjs';
 import {createZoteroStorage} from './zotero-storage.mjs';
 import {createReaderNodeTracker} from './reader-node-tracker.mjs';
+import {createAnnotationSessions} from './annotation-sessions.mjs';
+import {watchReaderAnnotations} from './reader-annotations.mjs';
 import {validateModelConfig,buildRequest,parseExplanation,explanationMessages,conversationMessages,friendlyHTTPError} from './model-adapter.mjs';
 
 import {recoverExplanation,normalizeAnswer} from './explanation-format.mjs';
@@ -31,6 +33,31 @@ export async function start({id,version,rootURI}) {
   let store, startupError = '';
   try { store = await KnowledgeTreeStore.open(storage,{idFactory:() => Zotero.Utilities.randomString(24)}); }
   catch { startupError = t("archiveError"); }
+  const annotationSessions=store ? createAnnotationSessions({Zotero,store,jobs,onChanged:notify,message:t}) : null;
+  const readerWatches=new Map();
+  function annotationError() {
+    if(alive)reportError(Zotero.getMainWindow(),new Error(t('highlightCleanupFailed')));
+  }
+  async function openAnnotation(reader,key) {
+    if(!alive || !annotationSessions)return null;
+    const attachment=Zotero.Items.get(reader.itemID);if(!attachment)return null;
+    const node=await annotationSessions.open(attachment,key);
+    if(node)await showPanel(reader._window ?? Zotero.getMainWindow(),'reading',{surface:'floating'});
+    return node;
+  }
+  function watchReader(reader,doc) {
+    if(!alive || !annotationSessions)return;
+    const root=reader._iframeWindow?.document ?? doc;
+    if(!root || readerWatches.get(reader)?.doc===root)return;
+    readerWatches.get(reader)?.dispose();
+    readerWatches.set(reader,{doc:root,dispose:watchReaderAnnotations(reader,root,{onOpen:key=>openAnnotation(reader,key),onError:annotationError,onDispose:()=>{if(readerWatches.get(reader)?.doc===root)readerWatches.delete(reader);}})});
+  }
+  const annotationObserver=annotationSessions ? Zotero.Notifier.registerObserver({notify(event,type) {
+    if(!alive || type!=='item' || !['delete','trash','modify'].includes(event))return;
+    // Do not await: annotation.saveTx can dispatch this while selection holds
+    // the queue. Reconciliation runs after that transaction and session save.
+    void annotationSessions.reconcile().catch(annotationError);
+  }},['item'],id+'-annotations') : null;
   const logins = () => Services.logins.findLogins(LOGIN,null,REALM);
   async function credentials() { return logins()[0]?.password ?? ''; }
   function config() { return {protocol:prefGet('protocol') || 'chat',baseURL:prefGet('baseURL') || '',model:prefGet('model') || ''}; }
@@ -118,7 +145,7 @@ export async function start({id,version,rootURI}) {
   }
   async function generate(nodeId) {
     requireStore();
-    if (jobs.get(nodeId)?.status === 'loading') return;
+    if (!alive || !store.snapshot().nodes.some(node=>node.id===nodeId) || jobs.get(nodeId)?.status === 'loading') return;
     const job={status:'loading',kind:'explanation',cancelled:false};
     jobs.set(nodeId,job); notify();
     try {
@@ -195,7 +222,8 @@ export async function start({id,version,rootURI}) {
     const doc=store.snapshot().documents.find(doc => doc.id === node.documentId);
     const item=Zotero.Items.getByLibraryAndKey(doc.identity.libraryId,doc.identity.attachmentKey);
     if (!item || item.deleted) throw new Error(t("attachmentMissing"));
-    await Zotero.Reader.open(item.id,node.source.location.pageIndex === null ? undefined : {pageIndex:node.source.location.pageIndex});
+    const location=node.source.location;
+    await Zotero.Reader.open(item.id,location.annotationKey ? {annotationID:location.annotationKey} : location.pageIndex===null ? undefined : {pageIndex:location.pageIndex});
   }
   const bridge = {
     state:async () => snapshot(),settings,saveSettings,saveLanguage,child,retry,ask,cancel,mutate,navigateOriginal,
@@ -403,10 +431,13 @@ export async function start({id,version,rootURI}) {
       const attachment=Zotero.Items.get(reader.itemID);
       const item=attachment?.parentItem ?? attachment;
       if (!attachment || !item) throw new Error(t("attachmentUnknown"));
-      const document=await store.registerDocument({libraryId:attachment.libraryID,itemKey:item.key,attachmentKey:attachment.key,title:item.getField('title') || reader._title || selected});
-      const page=annotation?.position?.pageIndex;
-      const node=await store.createSession({documentId:document.id,concept:selected,source:{selectedText:selected,context:selectionContext(doc,annotation),location:{pageIndex:Number.isSafeInteger(page) && page >= 0 ? page : null}}});
-      await showPanel(win,'reading',{surface:'floating'}); notify(); void generate(node.id); return node;
+      watchReader(reader,doc);
+      const {node,reused}=await annotationSessions.select({attachment,item,annotation,context:selectionContext(doc,annotation),title:item.getField('title') || reader._title || selected});
+      await annotationSessions.reconcile();
+      if(!store.snapshot().nodes.some(candidate=>candidate.id===node.id))throw new Error(t('highlightDeleted'));
+      await showPanel(win,'reading',{surface:'floating'});notify();
+      if(!reused)void generate(node.id);
+      return node;
     } catch (error) {
       await showPanel(win,'reading');
       reportError(win,error);
@@ -415,7 +446,7 @@ export async function start({id,version,rootURI}) {
   }
   const selectionHandler=event => {
     if (!alive) return;
-    const {reader,doc,params,append}=event;
+    const {reader,doc,params,append}=event;watchReader(reader,doc);
     const selected=String(params?.annotation?.text ?? '').trim(); if (!selected) return;
     const win=reader._window ?? Zotero.getMainWindow(); addWindow(win);
     windows.get(win).selection={reader,annotation:plain(params.annotation),doc};
@@ -428,22 +459,37 @@ export async function start({id,version,rootURI}) {
   };
   const toolbarHandler=event => {
     if (!alive) return;
+    watchReader(event.reader,event.doc);
     const button=event.doc.createElement('button');button.dataset.conceptExplorerLabel='knowledge';button.dataset.conceptExplorerTitle='menuTree'; button.textContent=t("knowledge"); button.title=t("menuTree");
     button.setAttribute('type','button'); button.className='toolbar-button';
     button.style.cssText='font:inherit;font-size:12px;padding:0 8px;color:inherit;';
     button.addEventListener('click',() => openSafely(event.reader._window ?? Zotero.getMainWindow(),'knowledge'));
     trackNode(button); event.append(button);
   };
+  const annotationHeaderHandler=event=>{
+    if(!alive || !annotationSessions)return;watchReader(event.reader,event.doc);
+    const key=event.params?.annotation?.id,attachment=Zotero.Items.get(event.reader.itemID);
+    if(!key || !attachment || !annotationSessions.has(attachment,key))return;
+    const button=event.doc.createElement('button');button.type='button';button.dataset.conceptExplorerLabel='viewHighlightConversation';button.textContent=t('viewHighlightConversation');
+    button.style.cssText='font:inherit;font-size:11px;padding:3px 6px;cursor:pointer;';
+    button.addEventListener('click',click=>{click.preventDefault();click.stopPropagation();void openAnnotation(event.reader,key).catch(annotationError);});trackNode(button);event.append(button);
+  };
+  Zotero.Reader.registerEventListener('renderSidebarAnnotationHeader',annotationHeaderHandler,id);
   Zotero.Reader.registerEventListener('renderTextSelectionPopup',selectionHandler,id);
   Zotero.Reader.registerEventListener('renderToolbar',toolbarHandler,id);
   for (const win of Zotero.getMainWindows()) addWindow(win);
-  const api={version,store,storage,snapshot,showPanel,explainSelection,addWindow,removeWindow,
+  if(annotationSessions) {try{await annotationSessions.reconcile();}catch{annotationError();}}
+  for(const reader of Zotero.Reader._readers ?? [])watchReader(reader);
+  const api={version,store,storage,snapshot,showPanel,explainSelection,openAnnotation,addWindow,removeWindow,
     async shutdown() {
       if (!alive) return;
       alive=false;
       shutdownHandle.run=null;
       for (const job of jobs.values()) { job.cancelled=true; try { job.cancel?.(); } catch {} }
       for (const record of windows.values()) { try { await flushRecord(record); } catch {} }
+      if(annotationObserver!==null)Zotero.Notifier.unregisterObserver(annotationObserver);
+      for(const watched of readerWatches.values())watched.dispose();readerWatches.clear();
+      if(annotationSessions)await annotationSessions.flush();
       if (store) await store.flush();
       Zotero.Notifier.unregisterObserver(tabObserver);
       for (const win of [...windows.keys()]) removeWindow(win);

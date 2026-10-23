@@ -1,0 +1,93 @@
+{
+  "version": "0.2.9",
+  "date": "2026-10-23",
+  "repository": "https://github.com/Purushka/zotero-concept-explorer",
+  "package": {
+    "file": "concept-explorer-0.2.9.xpi",
+    "bytes": 2624478,
+    "sha256": "5f7ce5bbdd55546e2296034125a1c64c2778f6ce7b1efa43db05f1febb393f33",
+    "sourceIncluded": true,
+    "thirdPartyLicensesIncluded": true,
+    "fileCount": 249,
+    "editableSourceFiles": 156,
+    "sourceMatchesWorkingTree": true
+  },
+  "compatibility": {
+    "declaredZotero": "8–10",
+    "testedHost": "Windows / Zotero 10.0.6",
+    "otherHostsVerified": false
+  },
+  "checks": {
+    "node": 133,
+    "chromium": {
+      "reading": 32,
+      "deletion": 12,
+      "floating": 17,
+      "localization": 5,
+      "formulaAndAnnotations": 4,
+      "total": 70
+    },
+    "native": {
+      "first": 25,
+      "restart": 9,
+      "total": 34
+    },
+    "model": "Synthetic localhost SSE, dummy credentials only",
+    "realProviderOrAnswerQualityVerified": false,
+    "userProfileModified": false
+  },
+  "features": [
+    "TeX rendered with local KaTeX in source, explanations, live draft preview and both conversation roles",
+    "Native PDF highlights linked to persistent conversation sessions",
+    "Highlight or annotation sidebar click restores saved conversation without a new model request",
+    "Deleting a highlight removes its linked conversations and descendant branches and cancels their requests",
+    "Reconcile highlights deleted while disabled; preserve unrelated conversations"
+  ],
+  "boundaries": {
+    "nativeClickTest": "Actual annotation sidebar card; PDF canvas coordinate clicks not separately simulated",
+    "pdfCanvasFallbackTest": "Chromium DOM and selectedAnnotationIDs fallback",
+    "pdfExtraction": "Missing symbols in extracted PDF text cannot be reliably reconstructed",
+    "historicalTextOnlySessions": "No automatic highlight creation without PDF selection geometry"
+  },
+  "languageOptions": [
+    "auto",
+    "zh-CN",
+    "zh-TW",
+    "en-US"
+  ],
+  "logoRemoved": true,
+  "updates": "manual",
+  "runtimeAssets": {
+    "content/panel.js": "9b413cec7df89b8d4cbdd517e5bc045c2e6e5b87b578ea68e8bf0957d35f57e3",
+    "content/runtime.js": "c4a9d8e2e810b95a9fdd3f70007c4031d9aab6711d78cf65a3ba57b69e5cbd1b",
+    "content/panel.css": "f0aaf969ee95e6721fdb6ece4b33d0a3887db7d8745038d22f7aea30e6303251",
+    "content/panel.html": "e14560b3468ee0205d23004ab151e04c54df00b48aa568a26905991d55898eaf"
+  },
+  "validationArtifacts": {
+    "node": ".test-artifacts/node-v0.2.9.log",
+    "chromium": {
+      "reading": ".test-artifacts/ui-czTAxD/result.json",
+      "deletion": ".test-artifacts/ui-deletion-rS3nlH/result.json",
+      "floating": ".test-artifacts/ui-floating-b4fsoj/result.json",
+      "localization": ".test-artifacts/ui-language-j2zyy1/result.json",
+      "formulaAndAnnotations": ".test-artifacts/formula-annotations-ui-07rnKs/result.json"
+    },
+    "native": ".test-artifacts/gecko-rollback-1792754537249-2ee4ec4d/result.json"
+  },
+  "commands": [
+    "node --test tests/*.test.mjs",
+    "node scripts/build.mjs --replace-test-build",
+    "node tests/ui-checks.cjs",
+    "node tests/node-deletion-ui.cjs",
+    "node tests/floating-window-ui.mjs",
+    "node tests/localization-ui.mjs",
+    "node tests/formula-annotations-ui.mjs",
+    "powershell -File tests/gecko-rollback/run-isolated.ps1"
+  ],
+  "privacy": {
+    "sourceAllowlistReviewed": true,
+    "workingProfilesOrArchivesIncluded": false,
+    "credentialPatternsFound": false,
+    "localUserPathsFound": false
+  }
+}

@@ -1,4 +1,47 @@
-# 0.2.8 validation scope — 2026-10-19
+# 0.2.9 validation scope — 2026-10-23
+
+This release renders TeX in source selections, explanations, live question
+previews, and both conversation roles. It links PDF questions to native Zotero
+highlights, restores their saved conversations on click, and removes associated
+sessions and descendant branches when a highlight is deleted. Deletion cancels
+running requests and repairs the retained workspace. The archive schema remains 1.
+
+Math parsing reuses vendored markdown-it-texmath and KaTeX. Escaped placeholders
+are hydrated with KaTeX's DOM API for privileged Gecko compatibility. Trust stays
+disabled, macros are isolated, expansion and size are bounded, and raw model HTML
+remains inert. Malformed TeX falls back to readable source. Instructions request
+complete math delimiters; they cannot recover notation already lost by PDF text
+extraction.
+
+The Node suite covers native annotation geometry, repeated selections, preserved
+comments, document/library isolation, linked branch deletion, cancellation,
+startup reconciliation, database failures, and formula safety and prompting.
+There are 133 Node tests. The five Chromium suites total 70 checks: reading 32,
+deletion 12, floating windows 17, localization 5, and formulas/annotations 4.
+The formula suite checks actual fraction/sum/subscript/superscript layout and
+MathML across source, answer, question preview and both message roles, inert HTML,
+one send per question, narrow-window scrolling, and Reader click filtering and
+iframe lifecycle. The PDF canvas fallback is exercised in Chromium.
+
+The isolated Windows / Zotero 10.0.6 harness runs the exact packaged XPI through
+25 first-run and 9 full-process-restart checks (34 total). It checks real Gecko
+math layout, native highlight persistence, repeated selection reuse, existing
+annotation comments, actual annotation-sidebar clicks without new model calls,
+native eraseTx deletion of linked branches, cancellation of a live descendant
+SSE request, restart restoration, and disable/delete/re-enable cleanup. Native
+PDF canvas coordinate clicks are not separately simulated.
+
+All model responses are synthetic localhost SSE using dummy credentials. The
+harness uses disposable profile/data directories and does not install into the
+user's working profile. These checks do not verify real model services or answer
+quality. The manifest declares Zotero 8–10; other host versions, macOS, and Linux
+are not verified. Historical records without PDF geometry are retained as-is.
+
+Exact package hashes, command outcomes and runtime asset hashes are recorded in
+this release's separate validation JSON. After the final package is built, both
+native phases must pass against those exact bytes before publication.
+
+## Historical 0.2.8 validation scope — 2026-10-19
 
 The current change adds an independent, persisted language preference (automatic,
 Simplified Chinese, Traditional Chinese, English) and removes both decorative

@@ -43,3 +43,18 @@ test('formula macros never leak into another formula or another rendering',()=>{
   mathRender(String.raw`$\gdef\personal{INJECTED}\personal$`);
   const html=mathRender(String.raw`$\personal$`);assert.doesNotMatch(html,/INJECTED/);
 });
+
+test('formula placeholders preserve complex TeX without using innerHTML math nodes',()=>{
+  const render=createSafeMarkdown(scope.markdownit,{mathPlaceholders:true});
+  const formula=String.raw`L_{\mathrm{tcn}}=-\sum_{b\in B}\log\frac{e^{S(z_i^b,z_j^b)}}{e^{S(z_i^b,z_j^b)}+e^{S(z_i^b,z_k^b)}+e^{S(z_i^b,z_i^{b'\ne b})}}`;
+  const html=render('$$'+formula+'$$\n\n'+'$z_i^b$ and `'+formula+'`');
+  assert.match(html,/class="math-token math-display"/);assert.match(html,/class="math-token math-inline"/);assert.ok(html.includes(formula));assert.doesNotMatch(html,/<math|<svg/);
+  assert.match(render.inline('$z_i^b$'),/math-inline/);
+});
+test('math hydration calls DOM renderer with safe limits and keeps TeX visible if rendering fails',async()=>{
+  const {hydrateMath}=await import('../src/safe-markdown.mjs');
+  const token=formula=>{const classes=new Set(['math-token','math-display']);return {textContent:formula,classList:{contains:value=>classes.has(value),remove:value=>classes.delete(value),add:value=>classes.add(value)},classes};};
+  const ok=token(String.raw`\frac{x}{y}`),bad=token('invalid'),calls=[];
+  hydrateMath({querySelectorAll:()=>[ok,bad]},{render:(formula,element,options)=>{calls.push({formula,options});if(formula==='invalid')throw Error('Unavailable');element.textContent='Rendered';}});
+  assert.equal(ok.textContent,'Rendered');assert.equal(bad.textContent,'invalid');assert.ok(bad.classes.has('math-error'));assert.equal(calls[0].options.trust,false);assert.equal(calls[0].options.output,'htmlAndMathml');assert.equal(calls[0].options.displayMode,true);
+});

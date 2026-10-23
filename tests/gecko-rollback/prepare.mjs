@@ -1,13 +1,14 @@
 import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
 import {resolve,join,basename,sep} from 'node:path';
 import {createHash} from 'node:crypto';
+import {formulaText} from '../fixtures/formulas.mjs';
 import {validateArchive} from '../../src/knowledge-tree-store.mjs';
 const project=resolve(import.meta.dirname,'../..'),root=resolve(process.argv[2] ?? ''),phase=process.argv[3] ?? 'first';
 if(!root.startsWith(join(project,'.test-artifacts')+sep) || !basename(root).startsWith('gecko-rollback-'))throw Error('Refusing non-test directory');
 const pkg=JSON.parse(await readFile(join(project,'package.json'),'utf8')),manifest=JSON.parse(await readFile(join(project,'addon/manifest.json'),'utf8'));
 const xpi=join(project,'dist','concept-explorer-'+pkg.version+'.xpi'),bytes=await readFile(xpi);
 await mkdir(join(root,'profile','extensions'),{recursive:true});await mkdir(join(root,'data'),{recursive:true});await mkdir(join(root,'harness'),{recursive:true});
-const template=await readFile(join(import.meta.dirname,'bootstrap.js'),'utf8');await writeFile(join(root,'harness','bootstrap.js'),template.replace('__ROOT_JSON__',JSON.stringify(root)));
+const template=(await readFile(join(import.meta.dirname,'bootstrap.js'),'utf8'))+'\n'+(await readFile(join(import.meta.dirname,'formula-annotations.js'),'utf8'));await writeFile(join(root,'harness','bootstrap.js'),template.replace('__ROOT_JSON__',()=>JSON.stringify(root)).replace('__MATH_JSON__',()=>JSON.stringify(formulaText)));
 await writeFile(join(root,'harness','manifest.json'),JSON.stringify({manifest_version:2,name:'Concept rollback isolated host tests',version:'1.0.0',applications:{zotero:{...manifest.applications.zotero,id:'concept-rollback-test@local.research'}}}));
 await writeFile(join(root,'profile','extensions','concept-rollback-test@local.research'),join(root,'harness'));
 await copyFile(xpi,join(root,'profile','extensions','concept-explorer@local.research.xpi'));await copyFile(join(import.meta.dirname,'fixture.pdf'),join(root,'fixture.pdf'));

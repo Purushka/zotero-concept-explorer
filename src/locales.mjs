@@ -1,6 +1,13 @@
 // Keep all three catalogs together so new UI copy always has a translation.
 // Values are Simplified Chinese, Traditional Chinese, and English respectively.
 export const messages = {
+  formulaPreview: ['公式预览', '公式預覽', 'Formula preview'],
+  selectionExplanation: ['选段解释', '選段解釋', 'Selected passage'],
+  viewHighlightConversation: ['查看对话', '查看對話', 'View conversation'],
+  highlightPositionMissing: ['无法定位这段选文，请在 PDF 中重新选择文字后提问。', '無法定位這段選文，請在 PDF 中重新選取文字後提問。', 'Select the text in the PDF again so the highlight can be positioned.'],
+  highlightReadOnly: ['这个 PDF 无法保存高亮，请先检查文库是否可编辑。', '這個 PDF 無法儲存醒目提示，請先檢查文庫是否可編輯。', 'This PDF cannot save highlights. Check that the library is editable.'],
+  highlightDeleted: ['该高亮已删除，对应对话也已移除。', '該醒目提示已刪除，對應對話也已移除。', 'This highlight and its conversation have been deleted.'],
+  highlightCleanupFailed: ['高亮已删除，但对话归档暂时无法保存。恢复存储后重启 Zotero 可重试清理。', '醒目提示已刪除，但暫時無法儲存對話封存。儲存恢復後重新啟動 Zotero 可重試清理。', 'The highlight was deleted, but the conversation archive could not be saved. Restart Zotero after storage is available to retry cleanup.'],
   appName: ['概念探索', '概念探索', 'Concept Explorer'],
   appSubtitle: ['你的论文知识树', '你的論文知識樹', 'Your paper knowledge tree'],
   viewNavigation: ['视图切换', '切換檢視', 'Switch view'],

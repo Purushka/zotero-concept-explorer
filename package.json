@@ -1,6 +1,6 @@
 {
   "name": "zotero-concept-explorer",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "type": "module",
   "description": "Zotero concept popovers, retained explanation pages and persistent knowledge trees",
@@ -11,7 +11,8 @@
     "test:ui": "node tests/ui-checks.cjs",
     "test:deletion-ui": "node tests/node-deletion-ui.cjs",
     "test:floating-ui": "node tests/floating-window-ui.mjs",
-    "test:language-ui": "node tests/localization-ui.mjs"
+    "test:language-ui": "node tests/localization-ui.mjs",
+    "test:formula-ui": "node tests/formula-annotations-ui.mjs"
   },
   "devDependencies": {
     "esbuild": "0.25.1",
