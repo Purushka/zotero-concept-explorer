@@ -1,5 +1,6 @@
 // Runs only inside the disposable real Zotero profile created by prepare.mjs.
 async function nativeFormulaAnnotationChecks({api,win,tabs,reader,readerDoc,attachment,item,bridge,nd,fd,floatFrame,calls,mode,job,finished,pass,wait,pause,assert,same,root,child}) {
+ await mode('newlines');
  const selection={text:formulaText,pageLabel:'1',position:{pageIndex:0,rects:[[30,150,280,175]]}};
  const before=(await calls()).length,node=await api.explainSelection(reader,selection,readerDoc);
  assert(node,'Formula selection failed');await finished(node.id);
@@ -10,16 +11,20 @@ async function nativeFormulaAnnotationChecks({api,win,tabs,reader,readerDoc,atta
  fd().querySelector('[data-action=expand]').click();
  await wait(()=>nd().querySelector('#page-slot article')?.dataset.nodeId===node.id,'formula page');
  const inspect=async(selector)=>{
-  const el=await wait(()=>nd().querySelector(selector+' .katex-display .katex-html'),'native formula '+selector);
+  const el=await wait(()=>nd().querySelector(selector+' .katex-display .mfrac')?.closest('.katex-html'),'native formula '+selector);
   await nd().fonts.ready;const container=nd().querySelector(selector),rect=el.getBoundingClientRect();
   assert(el.querySelector('.mfrac') && el.querySelector('.op-symbol') && el.querySelector('.msupsub') && container.querySelector('math mfrac') && rect.width>100 && rect.height>30 && !container.querySelector('.katex-error,.math-error,.math-token'),'Incomplete native math layout: '+selector+' '+rect.width+'x'+rect.height);
  };
  await inspect('#page-slot .source-content');await inspect('#page-slot .detail');
+ const inspectNewlines=selector=>{const el=nd().querySelector(selector);assert(el.querySelector('h2')?.textContent==='换行检查' && el.querySelectorAll('li').length===2 && el.querySelector('code')?.textContent==='\\n' && el.textContent.includes('C:\\new\\text') && [...el.querySelectorAll('p')].some(p=>p.textContent==='第一段说明。'),'Native newline formatting or literal code/path differs: '+selector);};
+ inspectNewlines('#page-slot .detail');
  const input=nd().querySelector('#page-slot textarea');input.value='请解释这个公式：\n\n'+formulaText;input.dispatchEvent(new (nd().defaultView.Event)('input',{bubbles:true}));
  await inspect('#page-slot .composer-preview');
  nd().querySelector('#page-slot .composer').dispatchEvent(new (nd().defaultView.Event)('submit',{bubbles:true,cancelable:true}));
  await wait(()=>job(node.id)?.kind==='ask' && job(node.id)?.status==='loading','native formula follow-up started');await finished(node.id);
- await inspect('#page-slot .message.user');await inspect('#page-slot .message.assistant');
+ await inspect('#page-slot .message.user');await inspect('#page-slot .message.assistant');inspectNewlines('#page-slot .message.assistant');
+ await pass('Gecko normalizes over-escaped streamed and saved paragraphs, lists and display math while preserving literal code and Windows paths');
+ await mode('normal');
  assert(api.store.getSession(node.id).messages[0].content.includes(formulaText) && nd().querySelector('#page-slot textarea').value==='','Native formula input changed or was not cleared');
  await pass('Gecko lays out InfoNCE fractions, sums, scripts and MathML in source, explanation, draft preview and both conversation roles');
  highlight.annotationComment='Synthetic user comment must survive reuse';await highlight.saveTx();

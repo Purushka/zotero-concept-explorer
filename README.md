@@ -8,7 +8,7 @@
 
 ## 安装
 
-1. 打开 [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest)，在 **Assets** 中下载 `concept-explorer-0.2.9.xpi`。
+1. 打开 [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest)，在 **Assets** 中下载 `concept-explorer-0.2.10.xpi`。
 2. 在 Zotero 中打开 **工具 → 插件**，将 `.xpi` 文件拖入插件窗口，或在齿轮菜单选择「从文件安装插件」。
 3. 重启 Zotero，打开 **工具 → 概念探索 · 模型设置**。
 
@@ -51,6 +51,8 @@
 
 预览和输出使用本地 KaTeX 渲染，支持分式、求和、上下标等常见写法；长公式可横向滚动。模型被要求保留完整 TeX。如果 PDF 文本抽取时已经丢失分数线、上下标或符号，插件无法从残缺文本可靠还原；可在追问中补入正确的 TeX。渲染失败时保留公式源码。
 
+模型误把正文换行写成字面的 `\n` / `\r\n`，或把 Markdown 多包了一层 JSON 字符串时，插件会在有段落、标题、列表或显示公式等排版线索时恢复换行。历史解释也会在打开时恢复排版；代码、Windows 路径和 `\nu`、`\nabla` 等公式命令会保留。
+
 新提问会建立或复用同一选区的原生高亮，并与对话关联。重复解释同一选区会打开已有会话，已有批注文字与评论会保留。高亮和对话在重启后仍可回看。需要可编辑的 PDF 批注权限；只有旧文本而没有选区坐标的历史记录不会自动补建高亮。
 
 在 Zotero 中删除高亮，也会删除关联会话、其后代分支、追问及草稿，并取消其中正在生成的回答。插件停用期间删除的高亮会在重新启用时检查并清理对应会话。删除无法一键撤销；重要记录请先备份。
@@ -92,7 +94,7 @@ pnpm test
 pnpm build
 ```
 
-构建结果位于 `dist/concept-explorer-0.2.9.xpi`，包含可编辑源码和第三方许可证。构建脚本会保留已有安装包；开发阶段只有确认是未发布测试包时才使用 `node scripts/build.mjs --replace-test-build`。
+构建结果位于 `dist/concept-explorer-0.2.10.xpi`，包含可编辑源码和第三方许可证。构建脚本会保留已有安装包；开发阶段只有确认是未发布测试包时才使用 `node scripts/build.mjs --replace-test-build`。
 
 浏览器回归需要单独安装 Playwright 和 Chromium。测试默认从项目解析 `playwright`，也可通过 `PLAYWRIGHT_MODULE_PATH` 指定已安装的 Playwright 模块，通过 `CHROMIUM_EXECUTABLE_PATH` 指定浏览器：
 
@@ -106,7 +108,7 @@ pnpm test:formula-ui
 
 Windows 原生测试入口为 `node tests/gecko-rollback/run-isolated.mjs`，可通过 `ZOTERO_EXECUTABLE` 指定 Zotero。该测试使用独立临时 profile、虚构文献、假 Key 和本地模拟接口，不使用日常文献库。
 
-0.2.9 的功能验证包括 **133 项 Node 测试、70 项 Chromium 检查、34 项 Zotero 原生检查**。原生检查包含完整进程重启、批注侧栏点击恢复、删除高亮与取消生成，以及停用期间删除后的清理；PDF 画布点击回退路径由 Chromium 检查覆盖。这些验证不代表真实付费 API 的可用性或模型回答质量。发布记录见 [0.2.9](docs/releases/v0.2.9.md)；验证范围见 [VALIDATION.md](VALIDATION.md)。
+0.2.10 的功能验证包括 **138 项 Node 测试、71 项 Chromium 检查、35 项 Zotero 原生检查**。原生检查包含完整进程重启、批注侧栏点击恢复、删除高亮与取消生成，以及停用期间删除后的清理；PDF 画布点击回退路径由 Chromium 检查覆盖。这些验证不代表真实付费 API 的可用性或模型回答质量。发布记录见 [0.2.10](docs/releases/v0.2.10.md)；验证范围见 [VALIDATION.md](VALIDATION.md)。
 
 ## 许可证与复用
 

@@ -6,11 +6,12 @@ import {createRequire} from 'node:module';
 import {KnowledgeTreeStore} from '../src/knowledge-tree-store.mjs';
 import {createNodeStorage} from './helpers/node-storage.mjs';
 import {formulaText} from './fixtures/formulas.mjs';
+import {escapedNewlineMarkdown} from './fixtures/model-newlines.mjs';
 const {chromium,launchOptions}=createRequire(import.meta.url)('./helpers/browser.cjs');
 const root=resolve(import.meta.dirname,'..');await mkdir(join(root,'.test-artifacts'),{recursive:true});const artifact=await mkdtemp(join(root,'.test-artifacts','formula-annotations-ui-'));
 const store=await KnowledgeTreeStore.open(createNodeStorage(artifact));
 const doc=await store.registerDocument({libraryId:1,itemKey:'FORM0001',attachmentKey:'MATHPDF1',title:'R3M: A Universal Visual Representation for Robot Manipulation'});
-const node=await store.createSession({documentId:doc.id,concept:formulaText,source:{selectedText:formulaText},explanation:{summary:'编码器 \\(z=F_{\\phi}(I)\\) 与 $S(u,v)=-\\lVert u-v\\rVert_2$。',detail:formulaText+'\n\n<script>window.formulaXSS=true</script>'}});
+const node=await store.createSession({documentId:doc.id,concept:formulaText,source:{selectedText:formulaText},explanation:{summary:'编码器 \\(z=F_{\\phi}(I)\\) 与 $S(u,v)=-\\lVert u-v\\rVert_2$。',detail:escapedNewlineMarkdown+'\n\n<script>window.formulaXSS=true</script>'}});
 await store.saveSessionView(node.id,{draft:formulaText});await store.openSession(node.id,'page');
 const state=()=>({archive:store.snapshot(),jobs:[],locale:'zh-CN',startupError:''});const checks=[],errors=[];let asks=0;
 const server=createServer(async(req,res)=>{
@@ -23,22 +24,24 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 try{
  browser=await chromium.launch(launchOptions);const page=await browser.newPage({viewport:{width:1240,height:900}});page.on('pageerror',e=>errors.push(e.message));
  await page.exposeFunction('rpc',async(action,args)=>{
-  if(action==='state')return state();if(action==='settings')return {language:'zh-CN',locale:'zh-CN',version:'0.2.9',protocol:'chat',hasKey:false};
+  if(action==='state')return state();if(action==='settings')return {language:'zh-CN',locale:'zh-CN',version:'0.2.10',protocol:'chat',hasKey:false};
   if(action==='mutate')await store[args[0]](...args[1]);
-  if(action==='ask'){asks++;await store.appendMessage(args[0],{role:'user',content:args[1]});await store.saveSessionView(args[0],{draft:''});await store.appendMessage(args[0],{role:'assistant',content:'模型的公式回答：\n\n'+formulaText});}
+  if(action==='ask'){asks++;await store.appendMessage(args[0],{role:'user',content:args[1]});await store.saveSessionView(args[0],{draft:''});await store.appendMessage(args[0],{role:'assistant',content:JSON.stringify(escapedNewlineMarkdown)});}
   return state();
  });
  await page.addInitScript(()=>{const call=async(action,...args)=>{const value=await window.rpc(action,args);if(value?.archive && action!=='state')await window.ConceptPanel.update(value);return value;};window.ConceptBridge={state:()=>call('state'),settings:()=>call('settings'),mutate:(...args)=>call('mutate',...args),ask:(...args)=>call('ask',...args),presentation:()=>{},navigateOriginal:async()=>{},dismiss:async()=>{}};});
  await page.goto('http://127.0.0.1:'+server.address().port+'/');await page.evaluate(()=>window.ConceptPanel.init('reading',{surface:'tab'}));await page.evaluate(()=>document.fonts.ready);
  const inspect=async selector=>{
-  const value=await page.locator(selector).first().evaluate(el=>{const formula=el.querySelector('.katex-display .katex-html'),frac=formula?.querySelector('.mfrac'),sum=formula?.querySelector('.op-symbol'),scripts=formula?.querySelector('.msupsub');return {formula:!!formula,frac:!!frac,sum:!!sum,scripts:!!scripts,w:formula?.getBoundingClientRect().width,h:formula?.getBoundingClientRect().height,errors:el.querySelectorAll('.katex-error,.math-error,.math-token').length,mathml:!!el.querySelector('math mfrac')};});
+  const value=await page.locator(selector).first().evaluate(el=>{const formula=el.querySelector('.katex-display .mfrac')?.closest('.katex-html'),frac=formula?.querySelector('.mfrac'),sum=formula?.querySelector('.op-symbol'),scripts=formula?.querySelector('.msupsub');return {formula:!!formula,frac:!!frac,sum:!!sum,scripts:!!scripts,w:formula?.getBoundingClientRect().width,h:formula?.getBoundingClientRect().height,errors:el.querySelectorAll('.katex-error,.math-error,.math-token').length,mathml:!!el.querySelector('math mfrac')};});
   assert.ok(value.formula && value.frac && value.sum && value.scripts && value.mathml && value.w>100 && value.h>30 && value.errors===0,selector+': '+JSON.stringify(value));
  };
  for(const selector of ['#page-slot .detail','#page-slot .source-content','#page-slot .composer-preview'])await inspect(selector);
  assert.ok(await page.locator('#page-slot .summary .katex').count()>=2);assert.equal(await page.locator('#page-slot h1').textContent(),'选段解释');assert.equal(await page.evaluate(()=>window.formulaXSS),undefined);checks.push('InfoNCE fractions, sums, subscripts and superscripts render in answers, source and draft preview; bracket delimiters and inert HTML supported');
+ const inspectNewlines=async selector=>{const content=page.locator(selector).first();assert.equal(await content.locator('h2').first().textContent(),'换行检查');assert.equal(await content.locator('li').count(),2);assert.equal(await content.locator('code').textContent(),String.raw`\n`);assert.ok((await content.textContent()).includes(String.raw`C:\new\text`));assert.ok((await content.innerHTML()).includes('<p>第一段说明。</p>'));};
+ await inspectNewlines('#page-slot .detail');checks.push('Historical over-escaped Markdown restores headings, paragraphs, lists and TeX while keeping literal code and paths');
  await page.screenshot({path:join(artifact,'formula-source-and-answer.png'),fullPage:true});
  await page.locator('#page-slot textarea').fill('请说明这个输入公式：\n\n'+formulaText);await inspect('#page-slot .composer-preview');await page.locator('#page-slot textarea').press('Control+Enter');await page.waitForSelector('#page-slot .message.assistant');
- await inspect('#page-slot .message.user');await inspect('#page-slot .message.assistant');assert.equal(asks,1);assert.equal(await page.locator('#page-slot textarea').inputValue(),'');assert.equal(await page.locator('#page-slot .composer-preview').isVisible(),false);checks.push('User input and model follow-up retain exact TeX and visible layout, send once and clear preview');
+ await inspect('#page-slot .message.user');await inspect('#page-slot .message.assistant');await inspectNewlines('#page-slot .message.assistant');assert.equal(asks,1);assert.equal(await page.locator('#page-slot textarea').inputValue(),'');assert.equal(await page.locator('#page-slot .composer-preview').isVisible(),false);checks.push('User input and model follow-up retain exact TeX and visible layout, send once and clear preview');
  await page.locator('#page-slot .messages').scrollIntoViewIfNeeded();await page.screenshot({path:join(artifact,'formula-conversation.png'),fullPage:true});
  await page.setViewportSize({width:440,height:780});await page.evaluate(()=>window.ConceptPanel.init('reading',{surface:'floating'}));await inspect('#floating-slot .message.user');await inspect('#floating-slot .message.assistant');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));checks.push('Long formulas scroll inside the narrow floating view without overflowing the window');
  const watcherResult=await page.evaluate(async()=>{

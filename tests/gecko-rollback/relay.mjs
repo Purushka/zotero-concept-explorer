@@ -3,6 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {formulaText} from '../fixtures/formulas.mjs';
+import {escapedNewlineMarkdown} from '../fixtures/model-newlines.mjs';
 const root=path.resolve(process.argv[2] ?? '');
 if(!path.basename(root).startsWith('gecko-rollback-'))throw Error('Expected isolated gecko-rollback directory');
 const local=n=>path.join(root,n),calls=[];let writing=Promise.resolve();
@@ -15,8 +16,8 @@ const server=http.createServer(async(req,res)=>{
   let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);
   const protocol=req.url.endsWith('/responses')?'responses':req.url.endsWith('/messages')?'anthropic':'chat';
   const sys=body.instructions ?? body.system ?? body.messages?.[0]?.content ?? '';
-  const combined=String(sys).includes('返回 JSON 对象'),text=combined?JSON.stringify({summary,detail}):'这是**测试追问**回答，涉及 [[条件独立]]。\n\n'+formulaText;
   const mode=JSON.parse(await fs.readFile(local('relay-mode.json'),'utf8')).mode;
+  const combined=String(sys).includes('返回 JSON 对象'),text=mode==='newlines' ? (combined ? JSON.stringify({summary,detail:escapedNewlineMarkdown}) : JSON.stringify(escapedNewlineMarkdown)) : combined ? JSON.stringify({summary,detail}) : '这是**测试追问**回答，涉及 [[条件独立]]。\n\n'+formulaText;
   const call={path:req.url,protocol,combined,model:body.model,body,stream:body.stream===true,completed:false,closed:false};calls.push(call);await publish();
   res.on('close',()=>{call.closed=true;void publish();});
   res.setHeader('Content-Type','text/event-stream');

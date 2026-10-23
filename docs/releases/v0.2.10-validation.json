@@ -1,0 +1,100 @@
+{
+  "version": "0.2.10",
+  "date": "2026-10-23",
+  "repository": "https://github.com/Purushka/zotero-concept-explorer",
+  "package": {
+    "file": "concept-explorer-0.2.10.xpi",
+    "bytes": 2630942,
+    "sha256": "7478203384f82c60fd68fb797c8fe17e206b46f9f04bd777d5908f4fd7b6b98a",
+    "sourceIncluded": true,
+    "thirdPartyLicensesIncluded": true,
+    "fileCount": 250,
+    "editableSourceFiles": 157,
+    "sourceMatchesWorkingTree": true
+  },
+  "compatibility": {
+    "declaredZotero": "8–10",
+    "testedHost": "Windows / Zotero 10.0.6",
+    "otherHostsVerified": false
+  },
+  "checks": {
+    "node": 138,
+    "chromium": {
+      "reading": 32,
+      "deletion": 12,
+      "floating": 17,
+      "localization": 5,
+      "formulaAndAnnotations": 5,
+      "total": 71
+    },
+    "native": {
+      "first": 26,
+      "restart": 9,
+      "total": 35
+    },
+    "model": "Synthetic localhost SSE, dummy credentials only",
+    "realProviderOrAnswerQualityVerified": false,
+    "userProfileModified": false
+  },
+  "features": [
+    "Conservatively restore model-generated over-escaped newlines with paragraph, heading, list and display-math layout evidence",
+    "Decode Markdown wrapped in one or two JSON strings; distinguish JSON newline escapes from known TeX commands",
+    "Shared output normalization for new, streaming, follow-up and reopened historical explanations without rewriting stored history",
+    "Preserve code escapes, Windows and UNC paths, and TeX commands such as \\nu and \\nabla",
+    "TeX rendered with local KaTeX in source, explanations, live draft preview and both conversation roles",
+    "Native PDF highlights linked to persistent conversation sessions",
+    "Highlight or annotation sidebar click restores saved conversation without a new model request",
+    "Deleting a highlight removes its linked conversations and descendant branches and cancels their requests",
+    "Reconcile highlights deleted while disabled; preserve unrelated conversations"
+  ],
+  "boundaries": {
+    "nativeClickTest": "Actual annotation sidebar card; PDF canvas coordinate clicks not separately simulated",
+    "pdfCanvasFallbackTest": "Chromium DOM and selectedAnnotationIDs fallback",
+    "pdfExtraction": "Missing symbols in extracted PDF text cannot be reliably reconstructed",
+    "historicalTextOnlySessions": "No automatic highlight creation without PDF selection geometry",
+    "newlineRecovery": "Conservative layout-based recovery; ambiguous single literal breaks, incomplete code and path suffixes may remain unchanged",
+    "normalizationScope": "Model output only; user input and PDF selections are preserved",
+    "nativeNewlineTest": "Completed output DOM from synthetic SSE; intermediate normalization covered by Node tests"
+  },
+  "languageOptions": [
+    "auto",
+    "zh-CN",
+    "zh-TW",
+    "en-US"
+  ],
+  "logoRemoved": true,
+  "updates": "manual",
+  "runtimeAssets": {
+    "content/panel.js": "64520e75b12e9507d80c00927121abe15901159552c85340e2b93c604e76f85a",
+    "content/runtime.js": "a93117634a9ba56c23481646b328a3fc4bca053ccf1fe6379b0dcd9d00ea442c",
+    "content/panel.css": "f0aaf969ee95e6721fdb6ece4b33d0a3887db7d8745038d22f7aea30e6303251",
+    "content/panel.html": "e14560b3468ee0205d23004ab151e04c54df00b48aa568a26905991d55898eaf"
+  },
+  "validationArtifacts": {
+    "node": ".test-artifacts/node-v0.2.10.log",
+    "chromium": {
+      "reading": ".test-artifacts/ui-25A5Ae/result.json",
+      "deletion": ".test-artifacts/ui-deletion-V8PyHp/result.json",
+      "floating": ".test-artifacts/ui-floating-vQ6CMT/result.json",
+      "localization": ".test-artifacts/ui-language-cvwFpo/result.json",
+      "formulaAndAnnotations": ".test-artifacts/formula-annotations-ui-ERxlG8/result.json"
+    },
+    "native": ".test-artifacts/gecko-rollback-1792767009440-d5b9839f/result.json"
+  },
+  "commands": [
+    "node --test tests/*.test.mjs",
+    "node scripts/build.mjs --replace-test-build",
+    "node tests/ui-checks.cjs",
+    "node tests/node-deletion-ui.cjs",
+    "node tests/floating-window-ui.mjs",
+    "node tests/localization-ui.mjs",
+    "node tests/formula-annotations-ui.mjs",
+    "powershell -File tests/gecko-rollback/run-isolated.ps1"
+  ],
+  "privacy": {
+    "sourceAllowlistReviewed": true,
+    "workingProfilesOrArchivesIncluded": false,
+    "credentialPatternsFound": false,
+    "localUserPathsFound": false
+  }
+}

@@ -8,7 +8,7 @@ Understand unfamiliar concepts while reading papers in Zotero. Select text for a
 
 ## Install
 
-1. Open [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest) and download `concept-explorer-0.2.9.xpi` from **Assets**.
+1. Open [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest) and download `concept-explorer-0.2.10.xpi` from **Assets**.
 2. In Zotero, open **Tools → Plugins**. Drag the `.xpi` into that window, or choose **Install Plugin From File** from its gear menu.
 3. Restart Zotero and open **Tools → Concept Explorer · Model settings**. Menu labels follow the selected language.
 
@@ -51,6 +51,8 @@ Source selections, summaries, detailed explanations, follow-up messages, and mod
 
 Bundled KaTeX renders fractions, sums, subscripts, superscripts, and other common notation. Long equations scroll horizontally. Model instructions request complete TeX. Symbols, fraction structure, or superscripts already lost during PDF text extraction cannot be reconstructed reliably; supply corrected TeX in a follow-up when necessary. Failed rendering preserves the formula source.
 
+If a model over-escapes prose line breaks as literal `\n` / `\r\n`, or wraps Markdown in a JSON string, the plugin restores line breaks when paragraph, heading, list, or display-math layout provides evidence. This also applies when reopening saved explanations. Code, Windows paths, and TeX commands such as `\nu` and `\nabla` are retained.
+
 A new question creates or reuses a native highlight for the same selection and links it to its conversation. Repeating the selection restores the existing session and preserves annotation text and comments. Highlights and conversations survive restart. Annotation editing must be allowed for the PDF. Older text-only records without selection coordinates do not receive highlights retroactively.
 
 Deleting a highlight in Zotero also deletes its linked conversations and descendant branches, including follow-ups and drafts, and cancels their running requests. When the plugin is re-enabled, it cleans up sessions whose highlights were deleted while it was disabled. There is no one-click undo; back up important records first.
@@ -92,7 +94,7 @@ pnpm test
 pnpm build
 ```
 
-The output is `dist/concept-explorer-0.2.9.xpi`, including editable source and third-party licenses. Existing packages are preserved; use `node scripts/build.mjs --replace-test-build` only for an unpublished development build.
+The output is `dist/concept-explorer-0.2.10.xpi`, including editable source and third-party licenses. Existing packages are preserved; use `node scripts/build.mjs --replace-test-build` only for an unpublished development build.
 
 Browser checks require a separate Playwright and Chromium installation. Tests resolve `playwright` from the project by default. `PLAYWRIGHT_MODULE_PATH` and `CHROMIUM_EXECUTABLE_PATH` can select existing installations.
 
@@ -106,7 +108,7 @@ pnpm test:formula-ui
 
 On Windows, `node tests/gecko-rollback/run-isolated.mjs` runs the isolated native harness. Set `ZOTERO_EXECUTABLE` if needed. It uses a disposable profile, synthetic papers, dummy credentials, and a localhost mock service.
 
-Version 0.2.9's feature validation includes **133 Node tests, 70 Chromium checks, and 34 native Zotero checks**. Native coverage includes process restart, annotation sidebar clicks, highlight deletion, generation cancellation, and cleanup after deletion while disabled. The PDF canvas click fallback is covered in Chromium. These do not establish paid-provider availability or real-model answer quality. See the [release notes](docs/releases/v0.2.9.md) and [validation scope](VALIDATION.md).
+Version 0.2.10's feature validation includes **138 Node tests, 71 Chromium checks, and 35 native Zotero checks**. Native coverage includes process restart, annotation sidebar clicks, highlight deletion, generation cancellation, and cleanup after deletion while disabled. The PDF canvas click fallback is covered in Chromium. These do not establish paid-provider availability or real-model answer quality. See the [release notes](docs/releases/v0.2.10.md) and [validation scope](VALIDATION.md).
 
 ## License and reused components
 

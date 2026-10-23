@@ -1,4 +1,44 @@
-# 0.2.9 validation scope — 2026-10-23
+# 0.2.10 validation scope — 2026-10-23
+
+This release repairs model-generated prose whose newlines were escaped one extra
+time, including literal `\n` / `\r\n` and Markdown wrapped in one or two JSON
+strings. The explanation normalizer requires Markdown layout evidence before
+recovering over-escaped prose. It skips inline and fenced code, Windows/UNC
+paths, known n-prefixed TeX commands, and literal escapes followed by sentence
+punctuation. It reuses the existing jsonrepair envelope parser. User input and
+PDF source selections do not receive this model-output normalization.
+
+Structured explanations, follow-up answers, and reopened historical content use
+the same normalizer. JSON newline escapes before ordinary text inside display
+math are decoded while commands such as \nu and \nabla remain intact. Prompts
+request actual Markdown line breaks and one layer of JSON escaping. This is
+conservative recovery: unmarked literal line breaks without layout evidence,
+unclosed code, or ambiguous path suffixes may remain as source text. It cannot
+reconstruct math lost during PDF extraction.
+
+The Node suite contains 138 tests. The five Chromium suites contain 71 checks:
+reading 32, deletion 12, floating windows 17, localization 5, formulas/annotations
+5. They cover saved malformed explanations, JSON-wrapped follow-ups, real heading,
+paragraph, list and formula DOM, literal code/path preservation, formula input,
+and existing highlight and conversation behavior.
+
+The isolated Windows / Zotero 10.0.6 harness targets the exact packaged XPI through
+26 first-run and 9 full-process-restart checks (35 total). Its newline case uses
+over-escaped localhost SSE for the explanation and JSON-string-wrapped follow-up,
+then checks the completed Gecko layout. Individual intermediate SSE frames are
+covered by Node normalization tests; native newline assertions inspect completed
+output. The native annotation sidebar click and Chromium PDF canvas fallback
+coverage from 0.2.9 still apply.
+
+All model responses use synthetic localhost SSE and dummy credentials. The
+harness uses independent profile/data directories and does not install into the
+user's working profile. Other host versions/platforms, real API services, and
+answer quality are not verified. The archive schema remains 1. Exact check
+outcomes, package/source consistency, and hashes are recorded separately in the
+0.2.10 validation JSON. Both native phases must pass against those exact bytes
+before publication.
+
+## Historical 0.2.9 validation scope — 2026-10-23
 
 This release renders TeX in source selections, explanations, live question
 previews, and both conversation roles. It links PDF questions to native Zotero
