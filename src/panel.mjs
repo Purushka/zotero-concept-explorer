@@ -51,6 +51,34 @@ function updateComposerPreview(article) {
   renderMarkdown(body,article.querySelector('textarea').value);
   preview.hidden=!body.querySelector('.katex,.katex-error,.math-error');
 }
+function resizeComposer(article) {
+  const input=article.querySelector('textarea');
+  if(!input.isConnected || !input.getClientRects().length)return;
+  input.style.height='0px';
+  const height=Math.min(176,Math.max(40,input.scrollHeight+2));
+  input.style.height=height+'px';input.style.overflowY=input.scrollHeight>height ? 'auto' : 'hidden';
+}
+function updateSendButton(article) {
+  const busy=state?.jobs.some(job=>job.nodeId===article.dataset.nodeId && job.status==='loading');
+  const button=article.querySelector('.composer-send');
+  button.dataset.state=busy ? 'stop' : 'send';
+  button.setAttribute('aria-label',t(busy ? 'stop' : 'send'));button.title=t(busy ? 'stop' : 'sendHint');
+  button.disabled=!busy && !article.querySelector('textarea').value.trim();
+  button.querySelector('.send-arrow').toggleAttribute('hidden',busy);button.querySelector('.stop-square').toggleAttribute('hidden',!busy);
+}
+function createSendButton() {
+  const button=element('button',null,'composer-send');button.type='submit';
+  const ns='http://www.w3.org/2000/svg',icon=document.createElementNS(ns,'svg');
+  icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');
+  const arrow=document.createElementNS(ns,'path');arrow.setAttribute('d','M12 19V5m-6 6 6-6 6 6');arrow.setAttribute('fill','none');arrow.setAttribute('stroke','currentColor');arrow.setAttribute('stroke-width','2.5');arrow.setAttribute('stroke-linecap','round');arrow.setAttribute('stroke-linejoin','round');arrow.classList.add('send-arrow');
+  const stop=document.createElementNS(ns,'rect');stop.setAttribute('x','6');stop.setAttribute('y','6');stop.setAttribute('width','12');stop.setAttribute('height','12');stop.setAttribute('rx','1');stop.setAttribute('fill','currentColor');stop.classList.add('stop-square');stop.setAttribute('hidden','');
+  icon.append(arrow,stop);button.append(icon);return button;
+}
+function fullTextButton(nodeId,messageId) {
+  const button=navigationButton(t('fullTextAgain'),'full-text',nodeId,'full-text-again');
+  button.dataset.i18n='fullTextAgain';button.title=t('fullTextHint');button.dataset.i18nTitle='fullTextHint';
+  if(messageId)button.dataset.messageId=messageId;return button;
+}
 function showError(message) { $('#notice').textContent=l10n.message(message); $('#notice').hidden=false; $('#save-status').textContent=t("saveError"); }
 function info(message) { $('#notice').textContent=l10n.message(message); $('#notice').hidden=false; }
 function queueView(nodeId,patch) {
@@ -91,17 +119,18 @@ function createArticle(node) {
   for (const [label,action,className] of [[t("expand"),'expand','primary'],[t("shrink"),'shrink',''],[t("parent"),'parent',''],[t("original"),'original',''],[t("explainSelection"),'selection-child',''],[t("deleteNode"),'delete-node','danger']]) actions.append(navigationButton(label,action,null,className));
   header.append(actions);
   const body=element('div',null,'session-body');
-  for (const className of ['answer','messages','stream-preview','job-state','source']) {
+  for (const className of ['answer','answer-actions','messages','stream-preview','job-state','source']) {
     const part=element('div',null,className);if (className === 'job-state') part.setAttribute('role','status');body.append(part);
   }
-  const form=element('form',null,'composer'),input=element('textarea'),send=element('button',t("send"),'primary');
-  input.dataset.i18nAriaLabel='followupLabel';input.dataset.i18nPlaceholder='followupPlaceholder';send.dataset.i18n='send';input.setAttribute('aria-label',t("followupLabel"));input.placeholder=t("followupPlaceholder");input.rows=1;send.type='submit';
+  body.querySelector('.answer-actions').append(fullTextButton(node.id));
+  const form=element('form',null,'composer'),input=element('textarea'),send=createSendButton();
+  input.dataset.i18nAriaLabel='followupLabel';input.dataset.i18nPlaceholder='followupPlaceholder';input.dataset.i18nTitle='sendHint';input.title=t('sendHint');input.setAttribute('aria-label',t("followupLabel"));input.placeholder=t("followupPlaceholder");input.rows=1;send.type='submit';
   const preview=element('div',null,'composer-preview');preview.hidden=true;
   const previewLabel=element('small',t('formulaPreview'));previewLabel.dataset.i18n='formulaPreview';
   preview.append(previewLabel,element('div',null,'preview-content'));
   form.append(preview,input,send);article.append(header,body,form);
   article.querySelector('textarea').value=node.view.draft;
-  article.querySelector('textarea').addEventListener('input',event => {queueView(node.id,{draft:event.target.value});updateComposerPreview(article);});
+  article.querySelector('textarea').addEventListener('input',event => {queueView(node.id,{draft:event.target.value});updateComposerPreview(article);resizeComposer(article);updateSendButton(article);});
   article.querySelector('.session-body').addEventListener('scroll',event => {
     if (!article.isConnected || bridge().isVisible?.() === false) return;
     const record=articles.get(node.id);
@@ -113,19 +142,32 @@ function createArticle(node) {
     const desired=dirty.get(node.id)?.scrollTop ?? nodeById(node.id)?.view.scrollTop ?? 0;
     if (Math.abs(event.target.scrollTop-desired)>1) queueView(node.id,{scrollTop:event.target.scrollTop});
   });
+  let submitting=false;
   article.querySelector('form').addEventListener('submit',event => {
-    event.preventDefault(); const input=article.querySelector('textarea'); const question=input.value.trim(); if (!question) return;
+    event.preventDefault();
+    if(state.jobs.some(job=>job.nodeId===node.id && job.status==='loading')) {void bridge().cancel(node.id);return;}
+    const input=article.querySelector('textarea'),question=input.value.trim();if(!question || input.disabled || submitting)return;
+    submitting=true;
     void perform(async () => {
       input.disabled=true;
       try {
         await bridge().ask(node.id,question);
         input.value='';
         queueView(node.id,{draft:''});
-      } finally { input.disabled=false; }
-    });
+      } finally { input.disabled=false;resizeComposer(article);updateComposerPreview(article);updateSendButton(article);input.focus(); }
+    }).finally(()=>{submitting=false;});
   });
-  article.querySelector('textarea').addEventListener('keydown',event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); article.querySelector('form').requestSubmit(); } });
-  const record={article,signatures:{},restoredScrollTop:null}; articles.set(node.id,record); return record;
+  let composing=false;
+  input.addEventListener('compositionstart',()=>{composing=true;});input.addEventListener('compositionend',()=>{composing=false;});
+  input.addEventListener('keydown',event=>{
+    if(event.key!=='Enter' || event.shiftKey || event.isComposing || composing || event.keyCode===229)return;
+    event.preventDefault();
+    if(!state.jobs.some(job=>job.nodeId===node.id && job.status==='loading'))form.requestSubmit();
+  });
+  let width=0;
+  const observer=typeof ResizeObserver==='function' ? new ResizeObserver(entries=>{const next=entries[0].contentRect.width;if(next!==width){width=next;resizeComposer(article);}}) : null;
+  observer?.observe(form);
+  const record={article,observer,signatures:{},restoredScrollTop:null};articles.set(node.id,record);return record;
 }
 function fillArticle(node,compact=false) {
   const record=articles.get(node.id) ?? createArticle(node);
@@ -150,9 +192,11 @@ function fillArticle(node,compact=false) {
   if(changed('answer',explanation))explanationSections(a.querySelector('.answer'),explanation);
   if(changed('messages',[l10n.locale,node.messages])) {
     const messages=a.querySelector('.messages');messages.replaceChildren();
-    for (const message of node.messages) {
+    for (const [index,message] of node.messages.entries()) {
       const box=element('div',null,'message '+message.role);box.append(element('small',message.role==='user' ? t("yourQuestion") : t("furtherExplanation")));
-      const body=element('div');renderMarkdown(body,message.role==='assistant' ? normalizeAnswer(message.content) : message.content);box.append(body);messages.append(box);
+      const body=element('div');renderMarkdown(body,message.role==='assistant' ? normalizeAnswer(message.content) : message.content);box.append(body);
+      if(message.role==='assistant' && node.messages[index-1]?.role==='user')box.append(fullTextButton(node.id,message.id));
+      messages.append(box);
     }
   }
   if(changed('preview',[l10n.locale,job?.status,job?.preview,job?.text])) {
@@ -168,8 +212,7 @@ function fillArticle(node,compact=false) {
   if(changed('status',[l10n.locale,job?.status,job?.error,job?.kind,node.messages.at(-1)?.role,!!explanation.detail])) {
     const status=a.querySelector('.job-state'); status.replaceChildren();
     if(job?.status==='loading') {
-      const pending=element('div',job.kind==='ask' ? t("answering") : t("explaining"),'pending');
-      pending.append(navigationButton(t("stop"),'cancel',node.id));status.append(pending);
+      // Generation and cancellation are represented by the composer button.
     } else if(job?.error) {
       const error=element('div',l10n.message(job.error),'job-error');error.append(navigationButton(job.kind==='ask' ? t("retryQuestion") : t("regenerate"),'retry',node.id));status.append(error);
     } else if(node.messages.at(-1)?.role==='user') {
@@ -187,7 +230,9 @@ function fillArticle(node,compact=false) {
   if (local && Object.hasOwn(local,'draft')) a.querySelector('textarea').value=local.draft;
   else if (document.activeElement !== a.querySelector('textarea')) a.querySelector('textarea').value=node.view.draft;
   updateComposerPreview(a);
-  a.querySelector('.composer button').disabled=job?.status === 'loading';
+  resizeComposer(a);updateSendButton(a);
+  a.querySelector('.answer-actions').hidden=!explanation.summary && !explanation.detail;
+  for(const button of a.querySelectorAll('[data-action=full-text]'))button.disabled=job?.status==='loading';
   a.querySelector('[data-action=parent]').disabled=!node.parentId && !compact;
   a.querySelector('.close').hidden=!compact;
   a.querySelector('[data-action=shrink]').hidden=compact || state.archive.workspace.view === 'knowledge';
@@ -252,6 +297,7 @@ function render() {
   for (const id of [pageId,floatNode?.id]) {
     const node=nodeById(id); if (!node) continue;
     const record=articles.get(id); const target=dirty.get(id)?.scrollTop ?? node.view.scrollTop;
+    resizeComposer(record.article);
     const body=record.article.querySelector('.session-body');
     if (Math.abs(body.scrollTop-target)>1) { body.scrollTop=target; record.restoredScrollTop=body.scrollTop; }
   }
@@ -265,7 +311,7 @@ async function update(value) {
   if(value.version)$('#version').textContent='v'+value.version;
   if (state.archive) {
     const live=new Set(state.archive.nodes.map(node => node.id));
-    for (const [id,record] of articles) if (!live.has(id)) { record.article.remove();articles.delete(id);dirty.delete(id); }
+    for (const [id,record] of articles) if (!live.has(id)) { record.observer?.disconnect();record.article.remove();articles.delete(id);dirty.delete(id); }
     for (const id of dirty.keys()) if (!live.has(id)) dirty.delete(id);
   }
   render();
@@ -344,6 +390,7 @@ document.addEventListener('click',event => {
         finally { if (button.isConnected) button.disabled=false; }
         break;
       }
+      case 'full-text': await bridge().regenerateFullText(id,button.dataset.messageId ?? null);break;
       case 'cancel': await bridge().cancel(id); break;
       case 'retry': await bridge().retry(id); break;
       case 'probe':

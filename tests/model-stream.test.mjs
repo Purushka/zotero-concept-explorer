@@ -90,3 +90,23 @@ test('malformed progress aborts the transport and surfaces a safe parser error',
   const http=httpFixture(['data: {broken}\n\n',chat('later','stop')]);
   await assert.rejects(requestModel(http,request('chat'),'chat'),{code:'invalid-event'});assert.equal(http.cancelled,true);assert.equal(http.calls,1);
 });
+
+test('known context limits from HTTP error JSON receive a safe actionable message',async()=>{
+  for(const status of [400,413,422])for(const field of ['code','type']) {
+    const http=httpFixture([JSON.stringify({error:{[field]:'context_length_exceeded',message:'SECRET-KEY full paper body'}})],{status,mime:'application/json'});
+    await assert.rejects(requestModel(http,request('chat'),'chat'),error=>{assert.equal(error.code,'context-length');assert.equal(error.status,status);assert.match(friendlyHTTPError(error),/上下文/);assert.doesNotMatch(error.message+friendlyHTTPError(error),/SECRET|full paper/);return true;});assert.equal(http.calls,1);
+  }
+});
+test('HTTP 413 and unknown errors never echo raw bodies or add a retry',async()=>{
+  for(const status of [400,413,422]) {
+    const http=httpFixture(['SECRET-KEY unparseable body'],{status,mime:'text/plain'});
+    await assert.rejects(requestModel(http,request('chat'),'chat'),error=>{assert.equal(error.status,status);assert.doesNotMatch(friendlyHTTPError(error),/SECRET|unparseable/);if(status===413)assert.match(friendlyHTTPError(error),/上下文/);return true;});assert.equal(http.calls,1);
+  }
+});
+test('stream context errors map both generic types and specific codes without exposing provider text',()=>{
+  for(const protocol of ['chat','responses','anthropic']) {
+    const stream=createModelStream(protocol),error={type:'invalid_request_error',code:'prompt_too_long',message:'SECRET-KEY'};
+    const data=protocol==='responses'?responses('response.failed',{response:{error}}):event({type:'error',error},'error');
+    assert.throws(()=>stream.feed(data),value=>{assert.equal(value.code,'context-length');assert.match(friendlyHTTPError(value),/上下文/);assert.doesNotMatch(value.message+friendlyHTTPError(value),/SECRET/);return true;});
+  }
+});

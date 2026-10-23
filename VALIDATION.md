@@ -1,4 +1,46 @@
-# 0.2.10 validation scope — 2026-10-23
+# 0.2.11 validation scope — 2026-10-24
+
+The composer uses a blue circular up-arrow and switches to a solid Stop square
+while a job reads the PDF or streams an answer. Live previews remain visible
+without the old green status strip. Enter sends once, Shift+Enter inserts a line
+break, and IME composition does not submit. Enter during generation keeps the
+next draft; the Stop button cancels the job. The textarea has no manual resize
+grip and grows/retracts from 40 to 176 CSS pixels, then scrolls internally.
+
+The full-paper action reuses Zotero's PDFWorker.getFullText(itemID, null) for the
+attachment identified by the saved library/key pair. It sends all extracted text
+only after the user chooses the action. It does not truncate the text or archive
+it. A successful result replaces the targeted explanation or assistant message;
+message IDs, creation times, later conversation, and the next draft remain.
+Cancellation, extraction failures, deleted/replaced jobs, and provider context
+errors retain the old answer. Only safe provider error codes are inspected.
+
+The Node suite passed 163 tests, including extraction, question/history selection,
+in-place replacement, asynchronous cancellation, transactional commit guards,
+and safe context-limit handling. Six Chromium suites passed 88 checks: reading
+32, deletion 12, floating windows 17, localization 5, formulas/annotations 5, and
+composer/full-paper 17. They check the real rendered controls, auto-sizing,
+keyboard and IME behavior, repeated Enter, synchronized Stop icons, non-truncated
+full-text requests, answer replacement, failure preservation, and math layout.
+
+The isolated Windows / Zotero 10.0.6 harness targets the final packaged XPI. Its
+composer/full-paper cases exercise actual Gecko events and SVG visibility, native
+PDFWorker extraction, the exact full-paper request, in-place answer replacement,
+HTTP 413 errors, cross-surface cancellation, and persistence after full process
+restart. Existing formula, newline, highlight, deletion, language, and rollback
+checks remain. The exact first-run/restart outcomes and package hashes are in the
+separate 0.2.11 validation JSON; both phases must pass against those bytes before
+publication. Native annotation clicks use the sidebar; the canvas fallback is
+covered by Chromium.
+
+Model responses use synthetic localhost SSE and dummy credentials. The native
+harness uses independent profile/data directories and does not install into the
+user's working profile. Other host versions/platforms, real API services, and
+answer quality are not verified. The archive schema remains 1. Math, newline
+recovery, localization, and the logo-free interface are retained. Full-paper
+context is bounded by the configured provider; scanned PDFs require OCR.
+
+## Historical 0.2.10 validation scope — 2026-10-23
 
 This release repairs model-generated prose whose newlines were escaped one extra
 time, including literal `\n` / `\r\n` and Markdown wrapped in one or two JSON

@@ -8,7 +8,7 @@
 
 ## 安装
 
-1. 打开 [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest)，在 **Assets** 中下载 `concept-explorer-0.2.10.xpi`。
+1. 打开 [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest)，在 **Assets** 中下载 `concept-explorer-0.2.11.xpi`。
 2. 在 Zotero 中打开 **工具 → 插件**，将 `.xpi` 文件拖入插件窗口，或在齿轮菜单选择「从文件安装插件」。
 3. 重启 Zotero，打开 **工具 → 概念探索 · 模型设置**。
 
@@ -36,11 +36,23 @@
 1. 在 Zotero PDF 阅读器里选中一个概念或一句话，点击 **解释概念**。也可使用 `Ctrl+Alt+E` 解释最近的选词。
 2. 先在小浮窗阅读简述，需要时点击 **在标签页展开** 查看详细解释。一次流式请求生成简述和详情，展开本身不会另发详情请求。
 3. 点击解释里标记的概念，或在 AI 解释、AI 追问回答中划词，继续创建子概念。父层页面和子分支都会保留。
-4. 在输入框继续追问；`Ctrl/Cmd+Enter` 可发送问题。不同概念独立保存对话、草稿和阅读位置。
+4. 在输入框继续追问；`Enter` 发送，`Shift+Enter` 换行，中文输入法确认候选字时不会误发送。不同概念独立保存对话、草稿和阅读位置。
 5. 选段提问后，原文会保留 Zotero 高亮。点击高亮或阅读器侧栏中的批注可恢复已保存的对话；也可在侧栏使用 **查看对话**，不会因此重新请求模型。
 6. 点击 **知识树** 回看历史，点击 **阅读** 恢复阅读现场。已有解释可以离线查看。
 
+发送按钮为蓝色圆形上箭头；生成时变为实心方块，点击可停止。生成中不再显示绿色状态提示条，正文仍实时显示临时预览。输入框取消手动缩放，随文字自动增高或收回，达到高度上限后在框内滚动。
+
+![蓝色圆形发送按钮和自动调整高度的输入框，使用合成示例数据](docs/images/composer-full-text.png)
+
 生成中的内容会作为临时预览显示，完整结束后才保存。停止、断流或服务报错时，原有完整解释和问题仍会保留。解释质量取决于所选模型与提供的上下文，重要结论请回到论文核对。
+
+## 结合全文重新回答
+
+如果解释不充分，点击初始解释或某条 AI 回答下的 **结合全文重新回答**。插件读取当前会话绑定的 PDF 全部可提取文本，连同选段和原问题重新发送给你配置的模型。追问重答使用该回答对应的原问题。
+
+新回答成功完成后替换对应解释或回答，保留后续对话；停止或失败会保留原答案和输入框草稿。读取和生成期间，同一蓝色按钮显示停止方块。
+
+全文只会在主动点击时发送，不自动上传，也不写入知识树存档。纯扫描 PDF 需要先做 OCR；模型上下文不足时会提示失败并保留原答案，不会悄悄截断全文。
 
 ## 公式与原文高亮
 
@@ -80,7 +92,7 @@
 
 - API Key 保存在 Zotero/Mozilla 的本地登录凭据存储中，不写入知识树或导出文件，也不会在设置页回显。
 - 解释请求会向你配置的模型服务发送选中文字、论文标题、可取得的附近原文和当前分支的父解释；追问包含当前节点的解释和对话。
-- 插件不会自动上传整篇论文或整个文献库，没有额外的插件遥测服务。UI、Markdown、数学公式、字体和翻译资源均在本地打包。
+- 只有主动点击「结合全文重新回答」时，才会把绑定 PDF 的全部可提取文本发送给模型；全文不写入知识树存档。插件不会自动上传整篇论文或整个文献库，没有额外的插件遥测服务。UI、Markdown、数学公式、字体和翻译资源均在本地打包。
 - 知识树保存在 `[Zotero 数据目录]/concept-explorer/knowledge-tree.json`，使用独立文件、备份及原子写入。卸载插件不会删除它。
 - 存档为本地明文，没有自动云同步或跨设备合并。损坏、未知格式和写入冲突会报错，不会自动清空存档。
 
@@ -94,7 +106,7 @@ pnpm test
 pnpm build
 ```
 
-构建结果位于 `dist/concept-explorer-0.2.10.xpi`，包含可编辑源码和第三方许可证。构建脚本会保留已有安装包；开发阶段只有确认是未发布测试包时才使用 `node scripts/build.mjs --replace-test-build`。
+构建结果位于 `dist/concept-explorer-0.2.11.xpi`，包含可编辑源码和第三方许可证。构建脚本会保留已有安装包；开发阶段只有确认是未发布测试包时才使用 `node scripts/build.mjs --replace-test-build`。
 
 浏览器回归需要单独安装 Playwright 和 Chromium。测试默认从项目解析 `playwright`，也可通过 `PLAYWRIGHT_MODULE_PATH` 指定已安装的 Playwright 模块，通过 `CHROMIUM_EXECUTABLE_PATH` 指定浏览器：
 
@@ -104,11 +116,12 @@ pnpm test:deletion-ui
 pnpm test:floating-ui
 pnpm test:language-ui
 pnpm test:formula-ui
+pnpm test:composer-ui
 ```
 
 Windows 原生测试入口为 `node tests/gecko-rollback/run-isolated.mjs`，可通过 `ZOTERO_EXECUTABLE` 指定 Zotero。该测试使用独立临时 profile、虚构文献、假 Key 和本地模拟接口，不使用日常文献库。
 
-0.2.10 的功能验证包括 **138 项 Node 测试、71 项 Chromium 检查、35 项 Zotero 原生检查**。原生检查包含完整进程重启、批注侧栏点击恢复、删除高亮与取消生成，以及停用期间删除后的清理；PDF 画布点击回退路径由 Chromium 检查覆盖。这些验证不代表真实付费 API 的可用性或模型回答质量。发布记录见 [0.2.10](docs/releases/v0.2.10.md)；验证范围见 [VALIDATION.md](VALIDATION.md)。
+0.2.11 已通过 **163 项 Node 测试、88 项 Chromium 检查**。原生验证针对最终安装包，在 Windows / Zotero 10.0.6 上检查实际 PDF 全文提取、发送与停止、完整进程重启、公式和高亮对话行为；准确结果和安装包校验值见 [发布验证记录](docs/releases/v0.2.11-validation.json)。测试使用本地模拟模型，不代表真实付费 API 的可用性或回答质量。发布说明见 [0.2.11](docs/releases/v0.2.11.md)；验证范围见 [VALIDATION.md](VALIDATION.md)。
 
 ## 许可证与复用
 

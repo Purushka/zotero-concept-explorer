@@ -1,6 +1,15 @@
 // Keep all three catalogs together so new UI copy always has a translation.
 // Values are Simplified Chinese, Traditional Chinese, and English respectively.
 export const messages = {
+  fullTextAgain: ["结合全文重新回答","結合全文重新回答","Answer again with full paper"],
+  fullTextHint: ["读取此对话绑定的 PDF 全文，发送给已配置的模型，并重新回答原问题。","讀取此對話綁定的 PDF 全文，傳送給設定的模型，並重新回答原問題。","Send the full PDF linked to this conversation to your configured model and answer the original question again."],
+  sendHint: ["Enter 发送，Shift+Enter 换行","Enter 傳送，Shift+Enter 換行","Enter to send, Shift+Enter for a new line"],
+  fullTextAttachmentMissing: ["找不到此对话绑定的 PDF 附件。请恢复原附件后重试。","找不到此對話綁定的 PDF 附件。請還原原附件後重試。","The PDF linked to this conversation is missing. Restore the attachment and try again."],
+  fullTextReadFailed: ["无法读取 PDF 全文。请确认原附件已下载、可以打开且未加密，然后重试。","無法讀取 PDF 全文。請確認原附件已下載、可以開啟且未加密，然後重試。","Could not read the full PDF. Check that the linked file is downloaded, readable, and not encrypted, then try again."],
+  fullTextEmpty: ["此 PDF 没有可提取的文字，无法结合全文重答。请先对扫描件进行 OCR。","此 PDF 沒有可擷取的文字，無法結合全文重答。請先對掃描件進行 OCR。","This PDF has no extractable text. Run OCR on a scanned PDF before answering with the full paper."],
+  fullTextIncomplete: ["未能提取 PDF 的全部页面。已有答案已保留，请检查附件后重试。","未能擷取 PDF 的全部頁面。已保留原答案，請檢查附件後重試。","Not all PDF pages could be extracted. The existing answer was kept. Check the attachment and try again."],
+  fullTextQuestionMissing: ["找不到要重新回答的原问题。请重新打开该对话。","找不到要重新回答的原問題。請重新開啟此對話。","The original question could not be found. Reopen this conversation."],
+  contextTooLong: ["全文超过当前模型的上下文或请求大小限制，请改用更长上下文的模型后重试。已有答案已保留。","全文超過目前模型的上下文或請求大小限制，請改用更長上下文的模型後重試。已保留原答案。","The full paper exceeds the model context or request size limit. Choose a model with a longer context and try again. The existing answer was kept."],
   formulaPreview: ['公式预览', '公式預覽', 'Formula preview'],
   selectionExplanation: ['选段解释', '選段解釋', 'Selected passage'],
   viewHighlightConversation: ['查看对话', '查看對話', 'View conversation'],
@@ -51,7 +60,7 @@ export const messages = {
   clearKey: ['移除已保存的 Key', '移除已儲存的 Key', 'Remove the saved API key'],
   saveSettings: ['保存设置', '儲存設定', 'Save settings'],
   probe: ['测试连接', '測試連線', 'Test connection'],
-  privacy: ['只有你点击解释或发送追问时，才会将所选文字、附近上下文及当前会话发给这里配置的服务。测试连接只发送一条简短测试消息，不附带论文内容。不会上传整篇论文或其他论文库内容。Key 保存在 Zotero 的登录凭据存储中，不写入知识树或导出文件。', '只有點選解釋或傳送追問時，才會將選取文字、附近上下文與目前對話傳給此處設定的服務。測試連線僅傳送簡短測試訊息，不包含論文內容。不會上傳整篇論文或其他文獻庫內容。Key 儲存在 Zotero 的登入憑證儲存區，不會寫入知識樹或匯出檔案。', 'Explaining a concept or sending a question shares the selected text, nearby context, and current conversation with your configured service. Connection tests send only a short test message. Entire papers and other library contents are not uploaded. API keys stay in Zotero’s credential store and are excluded from knowledge trees and exports.'],
+  privacy: ["解释或追问会将所选文字、附近上下文与当前会话发送给已配置的服务。点击「结合全文重新回答」时，会额外发送该对话绑定的 PDF 全部可提取文字。测试连接仅发送简短测试消息。Key 保存在 Zotero 登录凭据存储中；全文与 Key 都不会写入知识树归档。","解釋或追問會將選取文字、附近上下文與目前對話傳送給設定的服務。點選「結合全文重新回答」時，會額外傳送此對話綁定的 PDF 全部可擷取文字。測試連線僅傳送簡短測試訊息。Key 儲存在 Zotero 登入憑證儲存區；全文與 Key 都不會寫入知識樹封存。","Explaining or asking a question sends the selected text, nearby context, and current conversation to your configured service. Answer again with full paper also sends all extractable text from the PDF linked to that conversation. Connection tests send only a short test message. API keys stay in Zotero’s credential store. Full paper text and API keys are excluded from the knowledge tree archive."],
   archiveHeading: ['本地知识树存档', '本機知識樹存檔', 'Local knowledge tree archive'],
   archiveHelp: ['独立文件，带自动备份，不修改 Zotero 数据库。卸载插件不删除存档。', '獨立檔案，具自動備份，不修改 Zotero 資料庫。解除安裝插件不會刪除存檔。', 'A separate file with automatic backups. Zotero’s database is unchanged, and uninstalling the plugin keeps this archive.'],
   saveStatus: ['本地持久化 · 页面不会随导航丢失', '本機儲存 · 切換頁面不會遺失內容', 'Saved locally · Navigation keeps your pages'],

@@ -17,9 +17,12 @@ const server=http.createServer(async(req,res)=>{
   const protocol=req.url.endsWith('/responses')?'responses':req.url.endsWith('/messages')?'anthropic':'chat';
   const sys=body.instructions ?? body.system ?? body.messages?.[0]?.content ?? '';
   const mode=JSON.parse(await fs.readFile(local('relay-mode.json'),'utf8')).mode;
-  const combined=String(sys).includes('返回 JSON 对象'),text=mode==='newlines' ? (combined ? JSON.stringify({summary,detail:escapedNewlineMarkdown}) : JSON.stringify(escapedNewlineMarkdown)) : combined ? JSON.stringify({summary,detail}) : '这是**测试追问**回答，涉及 [[条件独立]]。\n\n'+formulaText;
+   const entries=body.input ?? body.messages ?? [];let fullText=false;try{fullText=!!JSON.parse(entries.find(m=>m.role==='user')?.content).fullPaper;}catch{}
+   const responseSummary=fullText ? '全文修订简述 $z_i$。' : summary,responseDetail=fullText ? '全文修订解释。\n\n'+formulaText : detail;
+  const combined=String(sys).includes('返回 JSON 对象'),text=mode==='newlines' ? (combined ? JSON.stringify({summary,detail:escapedNewlineMarkdown}) : JSON.stringify(escapedNewlineMarkdown)) : combined ? JSON.stringify({summary:responseSummary,detail:responseDetail}) : (fullText ? '全文修订追问回答。\n\n' : '这是**测试追问**回答，涉及 [[条件独立]]。\n\n')+formulaText;
   const call={path:req.url,protocol,combined,model:body.model,body,stream:body.stream===true,completed:false,closed:false};calls.push(call);await publish();
   res.on('close',()=>{call.closed=true;void publish();});
+   if(mode==='context-limit'){call.completed=true;await publish();res.writeHead(413,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{code:'context_length_exceeded',message:'Synthetic provider details that must stay private'}}));return;}
   res.setHeader('Content-Type','text/event-stream');
   if(protocol==='anthropic')res.write(sse({type:'message_start',message:{usage:{input_tokens:80,cache_read_input_tokens:80}}},'message_start'));
   const chunks=text.match(/.{1,12}|\n/g);for(const chunk of chunks){if(res.destroyed)return;

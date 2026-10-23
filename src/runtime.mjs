@@ -13,6 +13,7 @@ import {validateModelConfig,buildRequest,parseExplanation,explanationMessages,co
 
 import {recoverExplanation,normalizeAnswer} from './explanation-format.mjs';
 import {requestModel} from './model-stream.mjs';
+import {createFullTextAnswers} from './full-text-answer.mjs';
 
 const PREF = 'extensions.zotero.conceptExplorer.';
 const LOGIN = 'chrome://concept-explorer';
@@ -127,7 +128,7 @@ export async function start({id,version,rootURI}) {
     const archive=store?.snapshot() ?? null;
     // Repair old malformed JSON only for display, never overwrite the archive.
     if(archive) for(const node of archive.nodes) node.explanation=recoverExplanation(node.explanation);
-    return {archive,startupError,language:languagePreference(),locale:l10n.locale,version,jobs:[...jobs].filter(([nodeId]) => archive?.nodes.some(node => node.id === nodeId)).map(([nodeId,job]) => ({nodeId,status:job.status,kind:job.kind,error:job.error ?? '',preview:job.preview ?? null,text:job.text ?? ''}))};
+    return {archive,startupError,language:languagePreference(),locale:l10n.locale,version,jobs:[...jobs].filter(([nodeId]) => archive?.nodes.some(node => node.id === nodeId)).map(([nodeId,job]) => ({nodeId,status:job.status,kind:job.kind,fullText:!!job.fullText,phase:job.phase ?? '',messageId:job.messageId ?? null,error:job.error ?? '',preview:job.preview ?? null,text:job.text ?? ''}))};
   }
   function notify() {
     if (!alive) return;
@@ -143,6 +144,8 @@ export async function start({id,version,rootURI}) {
     while (node.parentId) { node=store.getSession(node.parentId); chain.unshift(node); }
     return chain;
   }
+  const fullTextAnswers=store ? createFullTextAnswers({Zotero,store,jobs,request,ancestors,notify,endJob,isAlive:()=>alive,t,localize:messages=>localizeModelMessages(messages,l10n.locale)}) : null;
+  function regenerateFullText(nodeId,messageId=null) {requireStore();return fullTextAnswers.regenerate(nodeId,messageId);}
   async function generate(nodeId) {
     requireStore();
     if (!alive || !store.snapshot().nodes.some(node=>node.id===nodeId) || jobs.get(nodeId)?.status === 'loading') return;
@@ -183,6 +186,8 @@ export async function start({id,version,rootURI}) {
   async function retry(nodeId) {
     requireStore();
     if (jobs.get(nodeId)?.status === 'loading') return;
+    const failed=jobs.get(nodeId);
+    if(failed?.fullText)return regenerateFullText(nodeId,failed.messageId);
     const previous=store.getSession(nodeId),last=previous.messages.at(-1);
     if (last?.role === 'user') {
       previous.messages.pop();
@@ -226,7 +231,7 @@ export async function start({id,version,rootURI}) {
     await Zotero.Reader.open(item.id,location.annotationKey ? {annotationID:location.annotationKey} : location.pageIndex===null ? undefined : {pageIndex:location.pageIndex});
   }
   const bridge = {
-    state:async () => snapshot(),settings,saveSettings,saveLanguage,child,retry,ask,cancel,mutate,navigateOriginal,
+    state:async () => snapshot(),settings,saveSettings,saveLanguage,child,retry,ask,cancel,regenerateFullText,mutate,navigateOriginal,
     async probe() { await request([{role:'user',content:'只回复 OK。'}],null,true); return t("probeSucceeded"); }
   };
   function trackNode(node) { eventNodes.track(node); }

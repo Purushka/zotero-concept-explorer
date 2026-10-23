@@ -60,6 +60,7 @@ async function run(){
   assert((await calls()).length===before+1 && api.store.getSession(repeat.id).explanation.detail,'Restored baseline unexpectedly reused cached explanation or delayed detail');
   same(prompt((await calls()).at(-1)).nearbyText,root.source.context,'Restart request clipped context');
   await pass('Same article/concept after restart makes one fresh combined request with unchanged context');
+  await nativeComposerRestartChecks({api,pass,assert,same});
   await nativeAnnotationRestartChecks({api,addon,pass,wait,calls,assert,same});
   await complete();return;
  }
@@ -228,6 +229,7 @@ async function run(){
  } finally {Zotero.Prompt.confirm=originalConfirm;api.storage.write=originalWrite;await mode('normal');}
 
  await nativeFormulaAnnotationChecks({api,win,tabs,reader,readerDoc,attachment,item,bridge,nd,fd,floatFrame,calls,mode,job,finished,pass,wait,pause,assert,same,root,child});
+ await nativeComposerFullTextChecks({api,bridge,nd,fd,floatFrame,calls,mode,job,finished,pass,wait,pause,assert,same,root,child,attachment,save});
  await IOUtils.writeJSON(local('restart-expected.json'),api.store.snapshot());
  await bridge().saveLanguage('en-US');
  await pass('English language preference saved for independent process restart');

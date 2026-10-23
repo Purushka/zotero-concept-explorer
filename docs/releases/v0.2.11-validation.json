@@ -1,0 +1,112 @@
+{
+  "version": "0.2.11",
+  "date": "2026-10-24",
+  "repository": "https://github.com/Purushka/zotero-concept-explorer",
+  "package": {
+    "file": "concept-explorer-0.2.11.xpi",
+    "bytes": 2654124,
+    "sha256": "11ac1defd2fb598ca4c756f574f1a5e748fc9941d8e8cc991d4886f439ba2617",
+    "sourceIncluded": true,
+    "thirdPartyLicensesIncluded": true,
+    "fileCount": 254,
+    "editableSourceFiles": 161,
+    "sourceMatchesWorkingTree": true
+  },
+  "compatibility": {
+    "declaredZotero": "8–10",
+    "testedHost": "Windows / Zotero 10.0.6",
+    "otherHostsVerified": false
+  },
+  "checks": {
+    "node": 163,
+    "chromium": {
+      "reading": 32,
+      "deletion": 12,
+      "floating": 17,
+      "localization": 5,
+      "formulaAndAnnotations": 5,
+      "composerAndFullText": 17,
+      "total": 88
+    },
+    "native": {
+      "first": 32,
+      "restart": 10,
+      "total": 42
+    },
+    "model": "Synthetic localhost SSE, dummy credentials only",
+    "realProviderOrAnswerQualityVerified": false,
+    "userProfileModified": false
+  },
+  "features": [
+    "Blue circular up-arrow Send button becomes a solid white Stop square during PDF extraction or generation; cancel from either the retained page or floating window",
+    "Remove the green generation status strip while retaining live answer previews",
+    "Enter sends once, Shift+Enter inserts a line break, and IME composition or key code 229 does not submit",
+    "Textarea grows and retracts from 40 to 176 CSS pixels, scrolls internally at its height limit, and has no manual resize grip",
+    "Answer again with full paper is available on the original explanation and each assistant answer",
+    "Read the bound PDF through Zotero PDFWorker.getFullText(itemID, null) and send all extracted text only on explicit full-paper action",
+    "Regenerate each answer using its original question and relevant preceding conversation; replace in place while retaining message identity, later messages and drafts",
+    "Cancellation, extraction failure, stale or deleted jobs and context-limit errors retain the previous answer; do not store PDF full text in the knowledge-tree archive",
+    "Retain local TeX rendering for PDF selections, explanations, live draft preview and both conversation roles",
+    "Retain native PDF highlights linked to saved conversations; click to restore and delete a highlight to remove its conversation branch",
+    "Retain conservative model-output newline recovery, three interface languages, auto language selection and the logo-free interface"
+  ],
+  "boundaries": {
+    "nativeClickTest": "Actual annotation sidebar card; PDF canvas coordinate clicks not separately simulated",
+    "pdfCanvasFallbackTest": "Chromium DOM and selectedAnnotationIDs fallback",
+    "pdfExtraction": "All extractable text from the bound PDF; scanned PDFs require OCR and missing formula symbols cannot be reliably reconstructed",
+    "fullPaperContext": "Full text is not truncated; provider context limits can reject long papers and the previous answer is retained",
+    "fullPaperStorage": "Full text is sent only after choosing the action and is not written into the archive",
+    "realProvider": "Network model requests are mocked; real paid API availability and answer quality are not verified",
+    "nativeFullPaperTest": "Actual Zotero PDFWorker extraction, exact mock request, native keyboard/IME/SVG controls, HTTP 413, cancellation and full process restart",
+    "historicalTextOnlySessions": "No automatic highlight creation without PDF selection geometry",
+    "newlineRecovery": "Conservative layout-based recovery; ambiguous single literal breaks, incomplete code and path suffixes may remain unchanged",
+    "normalizationScope": "Model output only; user input and PDF selections are preserved"
+  },
+  "archiveSchemaVersion": 1,
+  "languageOptions": [
+    "auto",
+    "zh-CN",
+    "zh-TW",
+    "en-US"
+  ],
+  "logoRemoved": true,
+  "updates": "manual",
+  "runtimeAssets": {
+    "content/panel.js": "46f4fae1ffa6e84a25e227ec3707e13ee4a56af9c445cb40841a45b001ce60a4",
+    "content/runtime.js": "b9b0cd1997e2889eab2e70929a2d05ec7ecb5a4450f3dbd5f5555a31bb3a0b63",
+    "content/panel.css": "6f2722e09cffca0883e13da2dce5ccb36d3a0c28ae52f892d3622e89108986cc",
+    "content/panel.html": "e14560b3468ee0205d23004ab151e04c54df00b48aa568a26905991d55898eaf"
+  },
+  "validationArtifacts": {
+    "node": ".test-artifacts/node-v0.2.11.log",
+    "chromium": {
+      "reading": ".test-artifacts/ui-QakmJ9/result.json",
+      "deletion": ".test-artifacts/ui-deletion-xYxWq8/result.json",
+      "floating": ".test-artifacts/ui-floating-IYAvDk/result.json",
+      "localization": ".test-artifacts/ui-language-lt0oon/result.json",
+      "formulaAndAnnotations": ".test-artifacts/formula-annotations-ui-GmzHq3/result.json",
+      "composerAndFullText": ".test-artifacts/composer-full-text-ui-BtNA9P/result.json"
+    },
+    "native": ".test-artifacts/gecko-rollback-1792784818286-9747dfdb/result.json",
+    "nativeFirst": ".test-artifacts/gecko-rollback-1792784818286-9747dfdb/first.complete.json",
+    "nativeRestart": ".test-artifacts/gecko-rollback-1792784818286-9747dfdb/restart.complete.json",
+    "packageAudit": ".test-artifacts/package-v0.2.11-audit.json"
+  },
+  "commands": [
+    "node --test tests/*.test.mjs",
+    "node scripts/build.mjs --replace-test-build",
+    "node tests/ui-checks.cjs",
+    "node tests/node-deletion-ui.cjs",
+    "node tests/floating-window-ui.mjs",
+    "node tests/localization-ui.mjs",
+    "node tests/formula-annotations-ui.mjs",
+    "node tests/composer-full-text-ui.mjs",
+    "node tests/gecko-rollback/run-isolated.mjs"
+  ],
+  "privacy": {
+    "sourceAllowlistReviewed": true,
+    "workingProfilesOrArchivesIncluded": false,
+    "credentialPatternsFound": false,
+    "localUserPathsFound": false
+  }
+}

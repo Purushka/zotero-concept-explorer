@@ -125,8 +125,9 @@ export class KnowledgeTreeStore {
     if (!id(value) || [...state.documents,...state.nodes].some(record => record.id === value)) throw new Error('ID generator returned an invalid or duplicate ID');
     return value;
   }
-  #mutate(operation) {
+  #mutate(operation,{shouldCommit}={}) {
     return this.#limit(async () => {
+      if(shouldCommit && !shouldCommit())return;
       const next = this.snapshot();
       const result = operation(next);
       next.revision += 1;
@@ -263,7 +264,7 @@ export class KnowledgeTreeStore {
       return {deletedNodeIds:[...removed],reparentedNodeIds:[],documentIds,mode:'subtree'};
     });
   }
-  setExplanation(nodeId, patch) {
+  setExplanation(nodeId, patch, {shouldCommit}={}) {
     const captured = clone(patch);
     keys(captured, ['summary','detail','format'], 'explanation patch');
     return this.#mutate(state => {
@@ -274,16 +275,23 @@ export class KnowledgeTreeStore {
       if (node.generation && !Object.keys(node.generation).length) delete node.generation;
       node.updatedAt = this.#clock();
       return node;
-    });
+    },{shouldCommit});
   }
-  appendMessage(nodeId, {role,content}) {
+  appendMessage(nodeId, {role,content}, {shouldCommit}={}) {
     return this.#mutate(state => {
       const node = this.#node(state,nodeId);
       const now = this.#clock();
       const message = {id:`message-${this.#idFactory()}`,role,content,createdAt:now};
       node.messages.push(message); node.updatedAt = now;
       return message;
-    });
+    },{shouldCommit});
+  }
+  replaceAssistantMessage(nodeId,messageId,content,{expectedContent,shouldCommit}={}) {
+    return this.#mutate(state=>{
+      const node=this.#node(state,nodeId),message=node.messages.find(message=>message.id===messageId);
+      if(message?.role!=='assistant' || (expectedContent!==undefined && message.content!==expectedContent))throw new Error('Answer changed before replacement');
+      message.content=content;node.updatedAt=this.#clock();return message;
+    },{shouldCommit});
   }
   saveSessionView(nodeId, patch) {
     const captured = clone(patch);

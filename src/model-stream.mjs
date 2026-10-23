@@ -3,7 +3,9 @@ import {readModelText} from './model-adapter.mjs';
 export const MAX_MODEL_TEXT=2*1024*1024;
 export function streamError(code) { const error=new Error('Model stream '+code);error.code=code;return error; }
 function providerError(error) {
-  const type=error?.type ?? error?.code;
+  const types=[error?.code,error?.type];
+  if(types.some(type=>['context_length_exceeded','request_too_large','prompt_too_long'].includes(type)))return streamError('context-length');
+  const type=types.find(type=>['authentication_error','permission_error','rate_limit_error','rate_limit_exceeded','overloaded_error'].includes(type));
   const status={authentication_error:401,permission_error:403,rate_limit_error:429,rate_limit_exceeded:429,overloaded_error:529}[type];
   const value=streamError('provider');if(status)value.status=status;return value;
 }
@@ -93,7 +95,15 @@ export async function requestModel(http,built,protocol,{onText,setCancel,isCance
     });
     if(isCancelled())throw streamError('cancelled');
     if(failure)throw failure;
-    if(xhr.status<200 || xhr.status>=300)throw {status:xhr.status};
+    if(xhr.status<200 || xhr.status>=300) {
+      // Read only recognized error codes; never expose a relay's raw body.
+      if([400,413,422].includes(xhr.status) && xhr.responseText?.length<=MAX_MODEL_TEXT) {
+        let data;try{data=JSON.parse(xhr.responseText);}catch{}
+        const known=providerError(data?.error);
+        if(known.code==='context-length'){known.status=xhr.status;throw known;}
+      }
+      throw {status:xhr.status};
+    }
     consume(xhr);
     if(mode==='sse')return stream.finish();
     let data;try{data=JSON.parse(xhr.responseText);}catch{throw streamError('invalid-response');}

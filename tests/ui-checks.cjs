@@ -125,11 +125,11 @@ const assert=require('node:assert/strict');
     const oldDetail=store.getSession(child.id).explanation.detail;
     jobs=[{nodeId:child.id,status:'loading',kind:'explanation',preview:{summary:'逐段简述 [[条件概率]]。',detail:'## 流式公式\n\n\\[x=\\frac{1}{2}\\]\n\n- 正在生成'},error:''}];
     await publish();
-    for(const p of pages){assert.ok(await p.locator('.stream-preview .katex').count()>0);assert.equal(await p.locator('.job-state [data-action=cancel]').count(),1);}
+    for(const p of pages){assert.ok(await p.locator('.stream-preview .katex').count()>0);assert.equal(await p.locator('.job-state').textContent(),'');const stop=p.locator('.composer-send[data-state=stop]');assert.equal(await stop.count(),1);assert.equal(await stop.isEnabled(),true);assert.equal(await stop.locator('.stop-square').isVisible(),true);assert.equal(await stop.locator('.send-arrow').isVisible(),false);}
     assert.equal(await page.evaluate(()=>window.savedAnswer===document.querySelector('#page-slot .answer').firstElementChild),true);
     assert.equal(await page.locator('textarea').inputValue(),'大小窗保留的草稿');
     assert.equal(store.getSession(child.id).explanation.detail,oldDetail);pass('两表面同步渲染临时流式 Markdown/公式，旧解释及草稿未覆盖');
-    await floating.locator('[data-action=cancel]').click();await wait(()=>jobs[0].status==='cancelled','cancel update');
+    await floating.locator('.composer-send[data-state=stop]').click();await wait(()=>jobs[0].status==='cancelled','cancel update');
     assert.ok(await page.locator('.stream-preview').textContent().then(t=>t.includes('未保存')));
     assert.equal(store.getSession(child.id).explanation.detail,oldDetail);pass('任一表面停止生成，另一表面同步未保存状态');
     // Screenshot-style persisted malformed JSON is recovered without archive writes.
