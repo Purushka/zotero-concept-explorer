@@ -1,6 +1,6 @@
 {
   "name": "zotero-concept-explorer",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "private": true,
   "type": "module",
   "description": "Zotero concept popovers, retained explanation pages and persistent knowledge trees",

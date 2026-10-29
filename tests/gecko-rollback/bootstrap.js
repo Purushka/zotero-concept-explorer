@@ -61,6 +61,7 @@ async function run(){
   same(prompt((await calls()).at(-1)).nearbyText,root.source.context,'Restart request clipped context');
   await pass('Same article/concept after restart makes one fresh combined request with unchanged context');
   await nativeComposerRestartChecks({api,pass,assert,same});
+  await nativeSelectionRestartChecks({api,pass,assert,same});
   await nativeAnnotationRestartChecks({api,addon,pass,wait,calls,assert,same});
   await complete();return;
  }
@@ -71,8 +72,8 @@ async function run(){
  const attachment=await Zotero.Attachments.importFromFile({file:local('fixture.pdf'),parentItemID:item.id});let reader=await Zotero.Reader.open(attachment.id);
  let readerDoc=await wait(()=>reader._iframeWindow?.document?.querySelector('.toolbar') && reader._iframeWindow.document,'actual PDF Reader');
  const buttons=[];Zotero.Reader._dispatchEvent({type:'renderTextSelectionPopup',reader,doc:readerDoc,params:{annotation:{text:'Posterior distribution',position:{pageIndex:0}}},append:button=>{buttons.push(button);readerDoc.body.append(button);}});
- assert(buttons.length===1 && buttons[0].textContent==='解释概念','Selection entry missing/duplicated');assert(await wait(()=>readerDoc.querySelector('button[title="概念探索 · 我的知识树"]'),'reader toolbar'),'Reader toolbar missing');
- await pass('Actual PDF Reader retains one selection entry and its knowledge-tree toolbar');
+ assert(buttons.length===2 && buttons[0].textContent==='解释' && buttons[1].textContent==='全文解释','Selection entries missing/duplicated');assert(await wait(()=>readerDoc.querySelector('button[title="概念探索 · 我的知识树"]'),'reader toolbar'),'Reader toolbar missing');
+ await pass('Actual PDF Reader offers Explain and Explain with full paper beside its knowledge-tree toolbar');
  const contextText='Synthetic paper setting: Bayesian parameter estimation. '+ 'Provided paper paragraph. '.repeat(22)+'Posterior distribution'+' updates parameters using the observed experiment. '+ 'Synthetic evidence and assumptions. '.repeat(24);
  function selectReaderContext(){
   let p=readerDoc.getElementById('rollback-synthetic-context');if(!p){p=readerDoc.createElement('p');p.id='rollback-synthetic-context';p.textContent=contextText;readerDoc.body.append(p);}
@@ -101,7 +102,7 @@ async function run(){
  await bridge().saveLanguage('en-US');
  assert(nd().documentElement.lang==='en-US' && fd().documentElement.lang==='en-US','Language failed to reach both native frames');
  assert(win.document.getElementById('concept-explorer-settings').getAttribute('label')==='Concept Explorer · Model settings','Native Tools menu not translated');
- assert(buttons[0].textContent==='Explain concept' && readerDoc.querySelector('button[title="Concept Explorer · My knowledge tree"]'),'Existing reader buttons not translated');
+ assert(buttons[0].textContent==='Explain' && buttons[1].textContent==='Explain with full paper' && readerDoc.querySelector('button[title="Concept Explorer · My knowledge tree"]'),'Existing reader buttons not translated');
  assert(win.document.getElementById('concept-explorer-drag-handle').getAttribute('aria-label').startsWith('Move concept popover'),'Native drag handle not translated');
  assert(!nd().querySelector('.brand-mark,.empty-icon') && !fd().querySelector('.brand-mark,.empty-icon'),'Logo remains in a native surface');
  await bridge().saveLanguage('zh-TW');assert(fd().querySelector('.app-header [data-action=settings]').textContent==='設定','Traditional Chinese missing');
@@ -160,8 +161,8 @@ async function run(){
  await pass('Native atomic archive and backup preserve explanations, metadata, tree and independent views');
  const beforeClose=(await calls()).length;
  await tabs.close(reader.tabID);reader=await Zotero.Reader.open(attachment.id);readerDoc=await wait(()=>reader._iframeWindow?.document?.querySelector('.toolbar') && reader._iframeWindow.document,'reopened Reader');
- const reopenedButtons=[];Zotero.Reader._dispatchEvent({type:'renderTextSelectionPopup',reader,doc:readerDoc,params:{annotation:{text:'Synthetic concept',position:{pageIndex:0}}},append:b=>reopenedButtons.push(b)});assert(reopenedButtons.length===1 && (await calls()).length===beforeClose,'Reader reopen lost/duplicated entry or sent HTTP');
- await pass('Closing and reopening the PDF retains the selection entry without extra requests');
+ const reopenedButtons=[];Zotero.Reader._dispatchEvent({type:'renderTextSelectionPopup',reader,doc:readerDoc,params:{annotation:{text:'Synthetic concept',position:{pageIndex:0}}},append:b=>reopenedButtons.push(b)});assert(reopenedButtons.length===2 && reopenedButtons[0].textContent==='解释' && reopenedButtons[1].textContent==='全文解释' && (await calls()).length===beforeClose,'Reader reopen lost/duplicated entry or sent HTTP');
+ await pass('Closing and reopening the PDF retains both selection entries without extra requests');
 
  // New checks use only synthetic sessions in this disposable profile.
  const deletionIds=[],originalConfirm=Zotero.Prompt.confirm,originalWrite=api.storage.write;
@@ -224,7 +225,8 @@ async function run(){
   await api.store.openSession(root.id,'page');await api.store.openSession(child.id,'floating');await np().ConceptPanel.update(api.snapshot());
   await pause(450);await np().ConceptPanel.flushViews();await floatFrame().contentWindow.ConceptPanel.flushViews();await api.store.flush();
   await IOUtils.writeJSON(local('deletion-expected.json'),{deletedNodeIds:deletionIds,sibling:api.store.getSession(sibling.id),documentId:root.documentId});
-  await IOUtils.writeJSON(local('restart-expected.json'),api.store.snapshot());same(await IOUtils.readJSON(api.storage.paths.file),api.store.snapshot(),'Post-deletion disk mismatch');
+  await nativeSelectionEntryChecks({api,win,tabs,reader,readerDoc,attachment,item,bridge,nd,fd,floatFrame,calls,mode,job,finished,prompt,pass,wait,pause,assert,same,root,child,save});
+ await IOUtils.writeJSON(local('restart-expected.json'),api.store.snapshot());same(await IOUtils.readJSON(api.storage.paths.file),api.store.snapshot(),'Post-deletion disk mismatch');
   await pass('Native deletion results and untouched branch persist in the atomic archive for process restart');
  } finally {Zotero.Prompt.confirm=originalConfirm;api.storage.write=originalWrite;await mode('normal');}
 

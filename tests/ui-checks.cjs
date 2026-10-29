@@ -167,7 +167,7 @@ const assert=require('node:assert/strict');
         while(node=walker.nextNode()){const start=node.textContent.indexOf(text);if(start<0)continue;const range=document.createRange();range.setStart(node,start);range.setEnd(node,start+text.length);const selected=window.getSelection();selected.removeAllRanges();selected.addRange(range);document.dispatchEvent(new Event('selectionchange'));return;}
         throw Error('Selection text missing: '+text);
       },{selector,text});
-      await p.waitForSelector('#explanation-selection:not([hidden])');
+      await p.waitForSelector('#explanation-selection-menu:not([hidden])');
     };
     await selectGenerated(page,'#page-slot .answer .detail','原理和适用条件');
     await page.locator('#explanation-selection').click();

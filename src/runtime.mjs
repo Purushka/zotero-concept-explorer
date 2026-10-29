@@ -14,6 +14,7 @@ import {validateModelConfig,buildRequest,parseExplanation,explanationMessages,co
 import {recoverExplanation,normalizeAnswer} from './explanation-format.mjs';
 import {requestModel} from './model-stream.mjs';
 import {createFullTextAnswers} from './full-text-answer.mjs';
+import {MAX_SELECTION_LENGTH} from './explanation-selection.mjs';
 
 const PREF = 'extensions.zotero.conceptExplorer.';
 const LOGIN = 'chrome://concept-explorer';
@@ -146,6 +147,15 @@ export async function start({id,version,rootURI}) {
   }
   const fullTextAnswers=store ? createFullTextAnswers({Zotero,store,jobs,request,ancestors,notify,endJob,isAlive:()=>alive,t,localize:messages=>localizeModelMessages(messages,l10n.locale)}) : null;
   function regenerateFullText(nodeId,messageId=null) {requireStore();return fullTextAnswers.regenerate(nodeId,messageId);}
+  function startSelectionAnswer(nodeId,{fullText=false,generateNew=false}={}) {
+    if(fullText) {
+      // Choosing full-paper context supersedes a local-context request. Repeated
+      // full-paper clicks reuse its active job instead of sending twice.
+      const job=jobs.get(nodeId);
+      if(job?.status==='loading' && !job.fullText)cancel(nodeId);
+      regenerateFullText(nodeId);
+    } else if(generateNew)void generate(nodeId);
+  }
   async function generate(nodeId) {
     requireStore();
     if (!alive || !store.snapshot().nodes.some(node=>node.id===nodeId) || jobs.get(nodeId)?.status === 'loading') return;
@@ -155,9 +165,10 @@ export async function start({id,version,rootURI}) {
       const node=store.getSession(nodeId);
       const document=store.snapshot().documents.find(doc => doc.id === node.documentId);
       const answer=await request(localizeModelMessages(explanationMessages(node,document,ancestors(node)),l10n.locale),job);
-      if (job.cancelled || !alive) return;
-      await store.setExplanation(nodeId,parseExplanation(answer));
-      job.status='saved';
+      const shouldCommit=()=>alive && !job.cancelled && jobs.get(nodeId)===job && store.snapshot().nodes.some(node=>node.id===nodeId);
+      if(!shouldCommit())return;
+      await store.setExplanation(nodeId,parseExplanation(answer),{shouldCommit});
+      if(shouldCommit())job.status='saved';
     } catch (error) { endJob(job,error); }
     notify();
   }
@@ -178,8 +189,10 @@ export async function start({id,version,rootURI}) {
   async function answerQuestion(nodeId,previous,questionText,job) {
     try {
       const answer=await request(localizeModelMessages(conversationMessages(previous,questionText),l10n.locale),job);
-      if (job.cancelled || !alive) return;
-      await store.appendMessage(nodeId,{role:'assistant',content:normalizeAnswer(answer)}); job.status='saved';
+      const shouldCommit=()=>alive && !job.cancelled && jobs.get(nodeId)===job && store.snapshot().nodes.some(node=>node.id===nodeId);
+      if(!shouldCommit())return;
+      await store.appendMessage(nodeId,{role:'assistant',content:normalizeAnswer(answer)},{shouldCommit});
+      if(shouldCommit())job.status='saved';
     } catch (error) { endJob(job,error); }
     notify();
   }
@@ -195,17 +208,18 @@ export async function start({id,version,rootURI}) {
       void answerQuestion(nodeId,previous,last.content,job);
     } else void generate(nodeId);
   }
-  async function child(parentId,concept,context='') {
+  async function child(parentId,concept,context='',{fullText=false}={}) {
     requireStore();
     const parent=store.getSession(parentId);
     const name=String(concept).trim();
-    if (!name || name.length > 600) throw new Error(t("chooseConcept"));
+    if (!name) throw new Error(t("chooseConcept"));
+    if(name.length>MAX_SELECTION_LENGTH)throw new Error(t('selectionTooLong',{limit:MAX_SELECTION_LENGTH}));
     const existing=store.snapshot().nodes.find(node => node.parentId === parentId && node.concept === name);
     let node;
     if (existing) { await store.openSession(existing.id,'floating'); node=existing; }
     else node=await store.createSession({documentId:parent.documentId,parentId,concept:name,source:{selectedText:name,context:context || parent.explanation.detail,location:parent.source.location}});
     notify();
-    if (!node.explanation.detail) void generate(node.id);
+    startSelectionAnswer(node.id,{fullText,generateNew:!node.explanation.detail});
     return node;
   }
   async function mutate(action,args=[]) {
@@ -426,13 +440,13 @@ export async function start({id,version,rootURI}) {
     }
     return selected;
   }
-  async function explainSelection(reader,annotation,doc) {
+  async function explainSelection(reader,annotation,doc,{fullText=false}={}) {
     const win=reader?._window ?? Zotero.getMainWindow();
     try {
       requireStore();
       const selected=String(annotation?.text ?? '').trim();
       if (!selected) throw new Error(t("readerSelectionRequired"));
-      if (selected.length > 1200) throw new Error(t("selectionTooLong"));
+      if (selected.length > MAX_SELECTION_LENGTH) throw new Error(t('selectionTooLong',{limit:MAX_SELECTION_LENGTH}));
       const attachment=Zotero.Items.get(reader.itemID);
       const item=attachment?.parentItem ?? attachment;
       if (!attachment || !item) throw new Error(t("attachmentUnknown"));
@@ -441,7 +455,7 @@ export async function start({id,version,rootURI}) {
       await annotationSessions.reconcile();
       if(!store.snapshot().nodes.some(candidate=>candidate.id===node.id))throw new Error(t('highlightDeleted'));
       await showPanel(win,'reading',{surface:'floating'});notify();
-      if(!reused)void generate(node.id);
+      startSelectionAnswer(node.id,{fullText,generateNew:!reused});
       return node;
     } catch (error) {
       await showPanel(win,'reading');
@@ -454,13 +468,19 @@ export async function start({id,version,rootURI}) {
     const {reader,doc,params,append}=event;watchReader(reader,doc);
     const selected=String(params?.annotation?.text ?? '').trim(); if (!selected) return;
     const win=reader._window ?? Zotero.getMainWindow(); addWindow(win);
-    windows.get(win).selection={reader,annotation:plain(params.annotation),doc};
-    const button=doc.createElement('button');
-    button.dataset.conceptExplorerLabel='explainConcept';button.dataset.conceptExplorerTitle='explainConceptTitle';button.textContent=t("explainConcept"); button.className='concept-explorer-reader-button';
-    button.setAttribute('type','button'); button.title=t("explainConceptTitle");
-    button.style.cssText='padding:7px 11px;margin:4px;border:1px solid #8faab4;border-radius:7px;font:inherit;color:#126c70;background:#f0f9f7;cursor:pointer;';
-    button.addEventListener('click',event => { event.preventDefault(); void explainSelection(reader,params.annotation,doc); });
-    trackNode(button); append(button);
+    const annotation=plain(params.annotation);
+    windows.get(win).selection={reader,annotation,doc};
+    for(const [label,title,fullText] of [['explain','explainConceptTitle',false],['explainFullText','explainFullTextTitle',true]]) {
+      const button=doc.createElement('button');
+      button.dataset.conceptExplorerLabel=label;button.dataset.conceptExplorerTitle=title;
+      button.dataset.conceptExplorerContext=fullText ? 'full-paper' : 'selection';
+      button.textContent=t(label);button.className='concept-explorer-reader-button';
+      button.setAttribute('type','button');button.title=t(title);
+      button.style.cssText='padding:7px 11px;margin:4px;border:1px solid #8faab4;border-radius:7px;font:inherit;color:#126c70;background:#f0f9f7;cursor:pointer;';
+      button.addEventListener('pointerdown',event=>event.preventDefault());
+      button.addEventListener('click',event=>{event.preventDefault();void explainSelection(reader,annotation,doc,{fullText});});
+      trackNode(button);append(button);
+    }
   };
   const toolbarHandler=event => {
     if (!alive) return;

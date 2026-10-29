@@ -1,4 +1,51 @@
-# 0.2.11 validation scope — 2026-10-24
+# 0.2.12 validation scope — 2026-10-29
+
+PDF selection popups and generated-text selections now offer Explain and Explain
+with full paper. The native reader integration reuses Zotero's documented
+renderTextSelectionPopup append API; extraction reuses the existing PDFWorker
+full-text path. There are no new third-party dependencies.
+
+The full-paper entry starts one combined explanation request using all text from
+the bound attachment. It does not first generate a local-context explanation.
+Both entries share the original highlight and conversation. Ordinary Explain
+reopens a saved answer; full-paper selection reuses the node and updates its
+explanation. Selecting full-paper context during a local job cancels the prior
+job; identity and transaction guards prevent stale results from committing.
+
+Original PDF and generated-text selections share a 20,000-character limit, up
+from the previous 1,200/600 limits. Selected text, equations and trailing lines
+are preserved in the archive and request. Oversized input is refused instead of
+clipped. Long passages have short navigation labels and a Selected passage
+heading while their source remains complete. Paragraph prompts cover the whole
+argument instead of selecting only a term. Existing generated-content boundary
+checks still exclude drafts, user messages and cross-reply/cross-session ranges.
+
+Node tests cover long-paragraph capture, boundaries, exact request content,
+native-highlight session reuse, archive round trips and prior model/storage
+behavior. Six Chromium suites cover the actual bundled panel: reading, deletion,
+floating windows, localization, formulas/annotations, and composer/full-paper.
+The expanded composer suite checks both paragraph buttons, complete full-paper
+requests, compact labels, shared sessions, oversize refusal and all languages.
+Exact outcomes and local artifact references are in the separate release
+validation JSON; documentation is not a substitute for these test results.
+
+Native validation uses the final XPI in an independent Windows / Zotero 10.0.6
+profile. Added scenarios invoke the actual PDF selection hook and both entry
+buttons, extract the real fixture PDF through PDFWorker, compare complete long
+selections in highlights and requests, switch an active request to full-paper
+context, select a generated paragraph in Gecko, reuse the child session, reject
+oversized input, and restore the results after complete process restart. Native
+annotation click regressions use the sidebar; canvas fallbacks use Chromium.
+
+Responses use synthetic localhost SSE with dummy credentials. The user's working
+profile and library are not modified. Other Zotero versions/platforms, real API
+availability and answer quality are not verified. The manifest declares Zotero
+8–10; archive schema remains 1. Scanned PDFs need OCR and long full papers remain
+subject to the provider's context limit. Full text is sent only when explicitly
+chosen and is never written into the knowledge archive. Prior math/newline,
+Send/Stop, localization, highlight deletion and persistence checks remain.
+
+## Historical 0.2.11 validation scope — 2026-10-24
 
 The composer uses a blue circular up-arrow and switches to a solid Stop square
 while a job reads the PDF or streams an answer. Live previews remain visible

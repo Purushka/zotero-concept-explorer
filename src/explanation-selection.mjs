@@ -1,9 +1,10 @@
 // Capture only generated explanation/assistant text, never a draft, toolbar,
 // source quotation or text from two different sessions. Both panel surfaces
 // share this policy and create children through the existing knowledge store.
+export const MAX_SELECTION_LENGTH=20_000;
 const generated='.answer,.message.assistant,.stream-preview';
 const parent=node=>node?.nodeType===1?node:node?.parentElement;
-export function captureExplanationSelection(selection,{maxLength=600}={}) {
+export function captureExplanationSelection(selection,{maxLength=MAX_SELECTION_LENGTH}={}) {
   if(!selection || selection.isCollapsed || selection.rangeCount!==1)return null;
   const text=selection.toString().trim();if(!text || text.length>maxLength)return null;
   const range=selection.getRangeAt(0);

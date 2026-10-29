@@ -16,7 +16,7 @@ const doc=await store.registerDocument({libraryId:1,itemKey:'INPUT001',attachmen
 const node=await store.createSession({documentId:doc.id,concept:'Temporal contrast',source:{selectedText:'Original selection $z_i$'},explanation:{summary:'原有简述。',detail:'原有解释 $z_i$。'}});
 await store.openSession(node.id,'page');await store.openSession(node.id,'floating');
 const l10n=createLocalizer('zh-CN'),jobs=new Map(),requests=[],lookups=[],extractions=[],checks=[],errors=[],pages=[];
-let asks=0,cancels=0,browser,closing=false;
+let asks=0,cancels=0,browser,closing=false;const childCalls=[];
 const state=()=>({archive:store.snapshot(),locale:l10n.locale,startupError:'',jobs:[...jobs].map(([nodeId,job])=>({nodeId,...job}))});
 const sync=async()=>{if(!closing)await Promise.all(pages.map(page=>page.evaluate(s=>window.ConceptPanel?.update(s),state())));};
 const notify=()=>{void sync().catch(e=>{if(!closing)errors.push(e.message);});};
@@ -49,11 +49,18 @@ try{
    }
    if(action==='cancel'){cancels++;const job=jobs.get(args[0]);job.cancelled=true;job.status='cancelled';job.error=l10n.t('cancelledPreview');}
    if(action==='full')full.regenerate(...args);
+   if(action==='child'){
+    childCalls.push(args);const [parentId,text,context,options={}]=args;
+    let child=store.snapshot().nodes.find(n=>n.parentId===parentId && n.concept===text);
+    if(child)await store.openSession(child.id,'floating');
+    else child=await store.createSession({documentId:doc.id,parentId,concept:text,source:{selectedText:text,context,location:store.getSession(parentId).source.location},explanation:options.fullText ? {} : {summary:'Local paragraph summary',detail:'Local paragraph detail'}});
+    if(options.fullText)full.regenerate(child.id);
+   }
    await sync();return state();
   });
   await page.addInitScript(()=>{
    const call=async(action,...args)=>{const value=await window.rpc(action,args);if(value?.archive && action!=='state')await window.ConceptPanel.update(value);return value;};
-   window.ConceptBridge={state:()=>call('state'),settings:()=>call('settings'),mutate:(...args)=>call('mutate',...args),ask:(...args)=>call('ask',...args),cancel:(...args)=>call('cancel',...args),regenerateFullText:(...args)=>call('full',...args),presentation:()=>{},navigateOriginal:async()=>{},dismiss:async()=>{}};
+   window.ConceptBridge={state:()=>call('state'),settings:()=>call('settings'),mutate:(...args)=>call('mutate',...args),ask:(...args)=>call('ask',...args),cancel:(...args)=>call('cancel',...args),regenerateFullText:(...args)=>call('full',...args),child:(...args)=>call('child',...args),presentation:()=>{},navigateOriginal:async()=>{},dismiss:async()=>{}};
   });
   await page.goto('http://127.0.0.1:'+server.address().port+'/');
   await page.evaluate(s=>window.ConceptPanel.init('reading',{surface:s}),surface);await page.evaluate(()=>document.fonts.ready);return page;
@@ -92,6 +99,37 @@ try{
  await article.locator('.answer-actions [data-action=full-text]').click();await until(()=>requests.length===4,'cancelled full-text request');const prior=store.getSession(node.id).explanation;await floatSend.click();await until(()=>jobs.get(node.id)?.cancelled,'cross-surface full-text cancellation');requests[3].resolve('{"summary":"迟到的覆盖","detail":"不应保存"}');await new Promise(r=>setImmediate(r));await store.flush();await sync();assert.deepEqual(store.getSession(node.id).explanation,prior);assert.equal(await field.inputValue(),'生成时继续写的草稿');pass('Stop in the floating view cancels full-text regeneration; late results cannot overwrite the retained answer');
  l10n.setLocale('en-US');await sync();assert.equal(await send.getAttribute('aria-label'),'Send');assert.equal(await article.locator('.answer-actions button').textContent(),'Answer again with full paper');pass('Composer and full-text action labels follow the selected interface language');
  await page.screenshot({path:join(artifact,'composer-full-text.png'),fullPage:true});await floating.screenshot({path:join(artifact,'floating-composer.png')});
+ // Paragraph selection entries on the actual bundled panel, using the same full-paper controller.
+ l10n.setLocale('zh-CN');const paragraph='整段解释 '+('An entire paragraph with all steps and evidence. '.repeat(65))+'PARAGRAPH-END';
+ await store.setExplanation(node.id,{detail:paragraph});await store.openSession(node.id,'page');await sync();
+ const selectDetail=async(text)=>{await page.evaluate(text=>{
+  const p=document.querySelector('#page-slot .detail p');if(text!==null)p.textContent=text;
+  const range=document.createRange();range.selectNodeContents(p);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.dispatchEvent(new Event('selectionchange'));
+ },text);};
+ await selectDetail(null);await page.waitForSelector('#explanation-selection-menu:not([hidden])');
+ assert.equal(await page.locator('#explanation-selection').textContent(),'解释');assert.equal(await page.locator('#explanation-selection-full-text').textContent(),'全文解释');
+ const menu=await page.locator('#explanation-selection-menu').boundingBox();assert.ok(menu.x>=0 && menu.x+menu.width<=1240 && menu.y>=0);
+ pass('A generated paragraph larger than both previous caps exposes Explain and Explain with full paper in one visible menu');
+ await page.locator('#explanation-selection-full-text').click();await until(()=>requests.length===5,'direct full-paper paragraph child');
+ const selectedChild=store.snapshot().nodes.find(n=>n.parentId===node.id && n.concept===paragraph),childRequest=JSON.parse(requests[4].messages[1].content);
+ assert.ok(selectedChild);assert.equal(childCalls.at(-1)[1],paragraph);assert.equal(childCalls.at(-1)[3].fullText,true);assert.equal(childRequest.selectedText,paragraph);assert.equal(childRequest.fullPaper.text,fullPaper);
+ requests[4].resolve(JSON.stringify({summary:'整段的全文解释',detail:'保留末尾证据并解释整段逻辑。'}));await until(()=>jobs.get(selectedChild.id)?.status==='saved','direct paragraph explanation saved');await sync();
+ pass('Clicking full-paper on a paragraph passes its complete text and original PDF to a single full-paper request');
+ assert.equal(await floating.locator('article h1').textContent(),'选段解释');const treeLabel=await page.locator('.tree-node').allTextContents();assert.ok(treeLabel.every(text=>text.length<110));
+ pass('Whole-paragraph sessions keep compact navigation labels and render a passage heading without truncating their stored source');
+ await selectDetail(null);await page.waitForSelector('#explanation-selection-menu:not([hidden])');await page.locator('#explanation-selection').click();await sync();
+ assert.equal(childCalls.at(-1)[3].fullText,false);assert.equal(requests.length,5);assert.equal(store.snapshot().nodes.filter(n=>n.parentId===node.id && n.concept===paragraph).length,1);
+ pass('The local selection entry reopens the same saved paragraph child without duplicating its session or full-paper request');
+ await selectDetail('x'.repeat(20001));await page.waitForFunction(()=>document.getElementById('explanation-selection-menu').hidden);assert.equal(childCalls.length,2);
+ pass('Selections beyond 20,000 characters do not create a clipped child or display an actionable selection menu');
+ for(const [locale,labels] of [['zh-CN',['解释','全文解释']],['zh-TW',['解釋','全文解釋']],['en-US',['Explain','Explain with full paper']]]){
+  l10n.setLocale(locale);await sync();await selectDetail(paragraph);await page.waitForSelector('#explanation-selection-menu:not([hidden])');
+  assert.equal(await page.locator('#explanation-selection').textContent(),labels[0]);assert.equal(await page.locator('#explanation-selection-full-text').textContent(),labels[1]);
+ }
+ pass('Both paragraph entry labels update in Simplified Chinese, Traditional Chinese and English');
+ l10n.setLocale('zh-CN');await sync();await selectDetail(paragraph);await page.waitForSelector('#explanation-selection-menu:not([hidden])');
+ await page.screenshot({path:join(artifact,'selection-entries.png'),fullPage:true});
+ await floating.screenshot({path:join(artifact,'selection-paragraph-floating.png')});
  assert.deepEqual(errors,[]);await writeFile(join(artifact,'result.json'),JSON.stringify({passed:checks.length,checks,errors},null,2));console.log(JSON.stringify({artifact,passed:checks.length,checks}));
 }catch(error){await writeFile(join(artifact,'failed.json'),JSON.stringify({message:String(error),stack:error.stack,checks,errors},null,2));throw error;}
 finally{closing=true;await browser?.close();await new Promise(r=>server.close(r));}

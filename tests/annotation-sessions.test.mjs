@@ -62,3 +62,11 @@ test('reconciliation after restart removes offline-deleted highlights without to
   const f=await fixture(),{node}=await f.service.select(f.input);const legacy=await f.store.createSession({documentId:node.documentId,concept:'Legacy session'});
   f.items.clear();const store=await KnowledgeTreeStore.open(f.storage),service=createAnnotationSessions({Zotero:f.Zotero,store,jobs:new Map()});await service.reconcile();assert.deepEqual(store.snapshot().nodes.map(node=>node.id),[legacy.id]);
 });
+
+test('whole-paragraph highlights and reused sessions preserve the complete selection and geometry',async()=>{
+ const f=await fixture(),text='A complete selected paragraph with formulas $z_i^b$. '.repeat(150).trim(),annotation={...selection,text};
+ const first=await f.service.select({...f.input,annotation}),again=await f.service.select({...f.input,annotation});
+ assert.ok(text.length>1200);assert.equal(f.saved.length,1);assert.equal(f.saved[0].text,text);assert.deepEqual(f.saved[0].position,selection.position);
+ assert.equal(first.node.source.selectedText,text);assert.equal(first.node.concept,text);assert.equal(again.node.id,first.node.id);assert.equal(again.reused,true);
+ const restored=await KnowledgeTreeStore.open(f.storage);assert.equal(restored.getSession(first.node.id).source.selectedText,text);
+});

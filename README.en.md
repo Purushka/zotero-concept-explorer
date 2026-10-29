@@ -8,7 +8,7 @@ Understand unfamiliar concepts while reading papers in Zotero. Select text for a
 
 ## Install
 
-1. Open [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest) and download `concept-explorer-0.2.11.xpi` from **Assets**.
+1. Open [Releases](https://github.com/Purushka/zotero-concept-explorer/releases/latest) and download `concept-explorer-0.2.12.xpi` from **Assets**.
 2. In Zotero, open **Tools → Plugins**. Drag the `.xpi` into that window, or choose **Install Plugin From File** from its gear menu.
 3. Restart Zotero and open **Tools → Concept Explorer · Model settings**. Menu labels follow the selected language.
 
@@ -33,12 +33,16 @@ Remote APIs require HTTPS; loopback services may use HTTP. A Responses root URL 
 
 ## Read and explore
 
-1. Select a concept or sentence in Zotero's PDF reader and choose **Explain concept**. `Ctrl+Alt+E` also explains the most recent selection.
+1. Select a word, sentence, or whole paragraph in Zotero's PDF reader. Choose **Explain** for nearby context or **Explain with full paper** for the complete PDF. The full-paper entry starts one request directly. `Ctrl+Alt+E` uses nearby context.
 2. Read the summary in a popover, then expand it into a native Zotero tab. One streaming request generates both summary and detail; expanding the view does not send another detail request.
-3. Click a marked concept, or select text in an AI explanation or answer, to create a child concept. Parent pages and child branches remain available.
+3. Click a marked concept, or select text or whole paragraphs in an AI explanation or answer, then choose **Explain** or **Explain with full paper** to create a child node. Parent pages and child branches remain available.
 4. Ask follow-up questions. `Enter` sends; `Shift+Enter` inserts a line break. Confirming an IME candidate does not send. Each concept retains its own conversation, draft, and scroll position.
 5. Asking about a selection retains a native Zotero highlight. Click the highlight or its annotation sidebar card to restore the saved conversation. The sidebar also offers **View conversation**; reopening does not make another model request.
 6. Open **Knowledge tree** to revisit earlier concepts, then **Reading** to resume. Saved explanations can be read offline.
+
+Both PDF and generated-text selections accept up to **20,000 characters**, including whole or multiple paragraphs. Selected text is passed in full, with equations and the final lines retained. Oversized selections must be split and are never silently clipped. Navigation uses short labels for long passages; the complete source remains saved. Both entries share the same highlight and conversation.
+
+![Explain and Explain with full paper after selecting a complete paragraph, using synthetic data](docs/images/selection-entries.png)
 
 The blue circular up-arrow sends a question. During generation it becomes a solid Stop square; click it to cancel. The green generation status bar is removed while live answer previews remain visible. The editor grows and retracts with its content, scrolls internally at its height limit, and has no manual resize grip.
 
@@ -92,7 +96,7 @@ The original paper is retained. There is no one-click undo. The archive's `.bak`
 
 - Keys stay in Zotero/Mozilla's local credential store, outside knowledge-tree files and exports, and are not displayed again.
 - Explanation requests send the selected text, paper title, available nearby text, and ancestor explanations to your configured provider. Follow-ups include the current concept's explanation and conversation.
-- Choosing **Answer again with full paper** sends all extractable text from the bound PDF to the model. Full text is not saved in the knowledge-tree archive. The plugin does not automatically upload entire papers or libraries and has no additional plugin telemetry service. UI libraries, Markdown, math, fonts, and translations are bundled locally.
+- Choosing **Explain with full paper** or **Answer again with full paper** sends all extractable text from the bound PDF to the model. Full text is not saved in the knowledge-tree archive. The plugin does not automatically upload entire papers or libraries and has no additional plugin telemetry service. UI libraries, Markdown, math, fonts, and translations are bundled locally.
 - The archive lives at `[Zotero data directory]/concept-explorer/knowledge-tree.json`, using a separate file, backups, and atomic writes. Uninstalling keeps it.
 - Archives are local plaintext. There is no automatic cloud synchronization or cross-device merging. Corrupt, unknown, or conflicting archive data is reported rather than silently reset.
 
@@ -106,7 +110,7 @@ pnpm test
 pnpm build
 ```
 
-The output is `dist/concept-explorer-0.2.11.xpi`, including editable source and third-party licenses. Existing packages are preserved; use `node scripts/build.mjs --replace-test-build` only for an unpublished development build.
+The output is `dist/concept-explorer-0.2.12.xpi`, including editable source and third-party licenses. Existing packages are preserved; use `node scripts/build.mjs --replace-test-build` only for an unpublished development build.
 
 Browser checks require a separate Playwright and Chromium installation. Tests resolve `playwright` from the project by default. `PLAYWRIGHT_MODULE_PATH` and `CHROMIUM_EXECUTABLE_PATH` can select existing installations.
 
@@ -121,7 +125,7 @@ pnpm test:composer-ui
 
 On Windows, `node tests/gecko-rollback/run-isolated.mjs` runs the isolated native harness. Set `ZOTERO_EXECUTABLE` if needed. It uses a disposable profile, synthetic papers, dummy credentials, and a localhost mock service.
 
-Version 0.2.11 passed **163 Node tests and 88 Chromium checks**. Native validation targets the final XPI on Windows / Zotero 10.0.6 and covers actual PDF extraction, Send/Stop, full process restart, formulas, and highlight-linked conversations. Exact outcomes and package hashes are in the [release validation record](docs/releases/v0.2.11-validation.json). Tests use a local mock model and do not establish paid-provider availability or answer quality. See the [release notes](docs/releases/v0.2.11.md) and [validation scope](VALIDATION.md).
+Version 0.2.12 passed **169 Node tests and 94 Chromium checks**. Native validation targets the final XPI on Windows / Zotero 10.0.6 and covers both native selection entries, complete paragraphs, actual PDF extraction, request switching, Send/Stop, full process restart, formulas, and highlight-linked conversations. Exact outcomes and package hashes are in the [release validation record](docs/releases/v0.2.12-validation.json). Tests use a local mock model and do not establish paid-provider availability or answer quality. See the [release notes](docs/releases/v0.2.12.md) and [validation scope](VALIDATION.md).
 
 ## License and reused components
 

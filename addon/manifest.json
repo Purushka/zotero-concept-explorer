@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "概念探索 · Concept Explorer",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "选词解释浮窗、递归概念页面与持久化知识树。",
   "author": "Concept Explorer",
   "applications": {

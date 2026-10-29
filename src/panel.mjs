@@ -9,32 +9,38 @@ const $=selector => document.querySelector(selector);
 const articles=new Map(),dirty=new Map();
 let state,screen='reading',surface='auto',markdown,saveTimer,anchor,actionQueue=Promise.resolve();
 const bridge=() => window.ConceptBridge;
-const selectionButton=document.createElement('button');
-selectionButton.id='explanation-selection';selectionButton.type='button';selectionButton.className='selection-explain primary';
-selectionButton.dataset.i18n='selectionChild';selectionButton.textContent=t("selectionChild");selectionButton.hidden=true;document.body.append(selectionButton);
+const selectionMenu=document.createElement('div');
+selectionMenu.id='explanation-selection-menu';selectionMenu.className='selection-explain';selectionMenu.hidden=true;
+selectionMenu.setAttribute('role','group');selectionMenu.dataset.i18nAriaLabel='explainSelection';
+for(const [id,label,title,fullText] of [['explanation-selection','explain','selectionChild',false],['explanation-selection-full-text','explainFullText','explainFullTextTitle',true]]) {
+  const button=document.createElement('button');button.id=id;button.type='button';button.className=fullText ? '' : 'primary';
+  button.dataset.i18n=label;button.textContent=t(label);button.dataset.i18nTitle=title;button.title=t(title);
+  button.addEventListener('click',()=>{
+    const target=selectionTarget;if(!target?.article.isConnected || target.article.hidden){hideSelection();return;}
+    hideSelection();window.getSelection()?.removeAllRanges();anchor=null;
+    void perform(async()=>{screen='reading';await bridge().child(target.nodeId,target.text,target.context,{fullText});});
+  });
+  selectionMenu.append(button);
+}
+document.body.append(selectionMenu);
 let selectionTarget=null,selectionRevision=0;
-function hideSelection() {selectionTarget=null;selectionButton.hidden=true;selectionRevision++;}
+function hideSelection() {selectionTarget=null;selectionMenu.hidden=true;selectionRevision++;}
 async function showSelection() {
   if(screen!=='reading' || bridge().isVisible?.()===false){hideSelection();return;}
   const target=captureExplanationSelection(window.getSelection());if(!target){hideSelection();return;}
-  selectionTarget=target;selectionButton.hidden=false;
-  selectionButton.setAttribute('aria-label',t('selectionLabel',{text:target.text.slice(0,80)}));
+  selectionTarget=target;selectionMenu.hidden=false;
+  selectionMenu.setAttribute('aria-label',t('selectionLabel',{text:target.text.slice(0,80)}));
   const rect=target.range.getBoundingClientRect(),revision=++selectionRevision;
   if(window.FloatingUIDOM){
     const {computePosition,offset,flip,shift}=window.FloatingUIDOM;
-    const point=await computePosition({getBoundingClientRect:()=>rect,contextElement:target.article},selectionButton,{strategy:'fixed',placement:'top',middleware:[offset(8),flip(),shift({padding:10})]});
+    const point=await computePosition({getBoundingClientRect:()=>rect,contextElement:target.article},selectionMenu,{strategy:'fixed',placement:'top',middleware:[offset(8),flip(),shift({padding:10})]});
     if(revision!==selectionRevision)return;
-    Object.assign(selectionButton.style,{left:point.x+'px',top:point.y+'px'});
-  }else Object.assign(selectionButton.style,{left:Math.max(10,rect.left)+'px',top:Math.max(10,rect.top-42)+'px'});
+    Object.assign(selectionMenu.style,{left:point.x+'px',top:point.y+'px'});
+  }else Object.assign(selectionMenu.style,{left:Math.max(10,rect.left)+'px',top:Math.max(10,rect.top-42)+'px'});
 }
-selectionButton.addEventListener('pointerdown',event=>event.preventDefault());
-selectionButton.addEventListener('click',()=>{
-  const target=selectionTarget;if(!target?.article.isConnected || target.article.hidden){hideSelection();return;}
-  hideSelection();window.getSelection()?.removeAllRanges();anchor=null;
-  void perform(async()=>{screen='reading';await bridge().child(target.nodeId,target.text,target.context);});
-});
+selectionMenu.addEventListener('pointerdown',event=>event.preventDefault());
 document.addEventListener('selectionchange',()=>{void showSelection().catch(()=>hideSelection());});
-document.addEventListener('pointerdown',event=>{if(event.target.closest?.('[data-action=selection-child]'))event.preventDefault();if(event.target!==selectionButton)hideSelection();});
+document.addEventListener('pointerdown',event=>{if(event.target.closest?.('[data-action=selection-child]'))event.preventDefault();if(!selectionMenu.contains(event.target))hideSelection();});
 document.addEventListener('scroll',hideSelection,true);
 document.addEventListener('keydown',event=>{if(event.key==='Escape')hideSelection();});
 function element(tag,text,className) { const result=document.createElement(tag); if (text != null) result.textContent=text; if (className) result.className=className; return result; }
@@ -238,6 +244,7 @@ function fillArticle(node,compact=false) {
   a.querySelector('[data-action=shrink]').hidden=compact || state.archive.workspace.view === 'knowledge';
   return a;
 }
+function passageLabel(text) {return text.length>100 ? text.replace(/\s+/g,' ').slice(0,70)+'…' : text;}
 function renderTree() {
   const tree=$('#tree'); tree.replaceChildren();
   const archive=state.archive; if (!archive) return;
@@ -251,7 +258,7 @@ function renderTree() {
     const title=navigationButton(doc.title || t("untitledPaper"),'select-document',doc.id,'tree-doc'); tree.append(title);
     stack.push(...(children.get(doc.id) ?? []).slice().reverse().map(node => ({node,depth:0})));
     while (stack.length) {
-      const {node,depth}=stack.pop(); const b=navigationButton(node.concept,w.view === 'knowledge' ? 'select-tree' : 'open',node.id,'tree-node');
+      const {node,depth}=stack.pop(); const b=navigationButton(passageLabel(node.concept),w.view === 'knowledge' ? 'select-tree' : 'open',node.id,'tree-node');
       b.style.setProperty('--depth',depth); b.setAttribute('role','treeitem'); b.setAttribute('aria-level',String(depth+2));
       b.prepend(element('span',depth === 0 ? '◇' : '↳')); b.classList.toggle('active',node.id === currentId() || node.id === w.pageNodeId);
       const row=element('div',null,'tree-row');
@@ -264,7 +271,7 @@ function renderTree() {
 function renderTabs() {
   const tabs=$('#retained'); tabs.replaceChildren(); const w=state.archive?.workspace; if (!w) return;
   const nodes=state.archive.nodes.filter(node => w.openNodeIds.includes(node.id) && (w.view === 'knowledge' || node.documentId === w.activeDocumentId));
-  for (const node of nodes) { const b=navigationButton(node.concept,'open',node.id); b.classList.toggle('active',node.id === w.pageNodeId || node.id === w.floatingNodeId); b.title=t('restorePage',{concept:node.concept}); tabs.append(b); }
+  for (const node of nodes) { const b=navigationButton(passageLabel(node.concept),'open',node.id); b.classList.toggle('active',node.id === w.pageNodeId || node.id === w.floatingNodeId); b.title=t('restorePage',{concept:node.concept}); tabs.append(b); }
 }
 async function positionFloating() {
   const slot=$('#floating-slot');

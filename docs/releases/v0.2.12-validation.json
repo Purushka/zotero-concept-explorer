@@ -1,0 +1,112 @@
+{
+  "version": "0.2.12",
+  "date": "2026-10-29",
+  "repository": "https://github.com/Purushka/zotero-concept-explorer",
+  "package": {
+    "file": "concept-explorer-0.2.12.xpi",
+    "bytes": 2663900,
+    "sha256": "9add89064eee8c267a09f2b69bbc713c5cd7cd35220f8db63306aaee0c2a6c1e",
+    "sourceIncluded": true,
+    "thirdPartyLicensesIncluded": true,
+    "fileCount": 256,
+    "editableSourceFiles": 163,
+    "sourceMatchesWorkingTree": true
+  },
+  "compatibility": {
+    "declaredZotero": "8–10",
+    "testedHost": "Windows / Zotero 10.0.6",
+    "otherHostsVerified": false
+  },
+  "checks": {
+    "node": 169,
+    "chromium": {
+      "reading": 32,
+      "deletion": 12,
+      "floating": 17,
+      "localization": 5,
+      "formulaAndAnnotations": 5,
+      "composerFullTextAndSelection": 23,
+      "total": 94
+    },
+    "native": {
+      "first": 40,
+      "restart": 11,
+      "total": 51
+    },
+    "model": "Synthetic localhost SSE, dummy credentials only",
+    "realProviderOrAnswerQualityVerified": false,
+    "userProfileModified": false
+  },
+  "features": [
+    "Explain and Explain with full paper are available directly in the native PDF selection popup and generated-text selection menu",
+    "Full-paper entry starts one combined explanation request without a preliminary local-context request, using the existing Zotero PDFWorker extraction path",
+    "Both selection entries share the native highlight and saved conversation; Explain reopens existing answers without a new model call",
+    "Original and generated selections share a 20,000-character cap and accept complete paragraphs, preserving equations and trailing text without silent truncation",
+    "Long passages use short navigation labels and a Selected passage heading while preserving their complete source and model payload",
+    "Paragraph instructions explain the entire selected argument instead of picking one term",
+    "Switching a loading local request to full-paper context cancels the old stream and uses job identity and transaction guards to prevent stale writes",
+    "New entry labels, titles and privacy hints are translated in Simplified Chinese, Traditional Chinese and English",
+    "Retain circular blue Send/Stop, Enter and IME behavior, auto-sizing input, full-paper answer replacement, TeX rendering, newline recovery and highlight-linked deletion"
+  ],
+  "selectionLimitCharacters": 20000,
+  "boundaries": {
+    "nativeSelectionTest": "Invoke actual renderTextSelectionPopup handlers and click generated DOM buttons; native generated-paragraph range selection uses Gecko",
+    "pdfGesture": "Mouse drag across actual PDF canvas text was not separately automated; existing annotation geometry is passed through Zotero APIs",
+    "nativeClickTest": "Actual annotation sidebar card; PDF canvas coordinate clicks not separately simulated",
+    "pdfCanvasFallbackTest": "Chromium DOM and selectedAnnotationIDs fallback",
+    "pdfExtraction": "All extractable text from the bound PDF; scanned PDFs require OCR and missing formula symbols cannot be reliably reconstructed",
+    "fullPaperContext": "Full paper text is not truncated; provider context limits can reject long papers and prior answers are retained",
+    "fullPaperStorage": "Full text is sent only after choosing full-paper explanation or regeneration; it is not written into the knowledge-tree archive",
+    "realProvider": "Requests use local synthetic SSE; real API availability and answer quality are not verified",
+    "historicalTextOnlySessions": "No automatic highlight creation without PDF selection geometry",
+    "generatedSelection": "Only generated answer content within one session and one reply; drafts, user messages and cross-reply ranges are excluded",
+    "normalizationScope": "Conservative newline recovery applies to model output; user input and PDF selections are preserved"
+  },
+  "archiveSchemaVersion": 1,
+  "languageOptions": [
+    "auto",
+    "zh-CN",
+    "zh-TW",
+    "en-US"
+  ],
+  "logoRemoved": true,
+  "updates": "manual",
+  "runtimeAssets": {
+    "content/panel.js": "889237eb72d7f8c9d61f77f7c89605f7266dc186e4cb89feb45bd864887dd62d",
+    "content/runtime.js": "6bb1352b5afb550ff319c59004949240207a6253936e1cae76a872b65ef93d0b",
+    "content/panel.css": "906a767830bffa9642a81121a32c05ba7e9f1e469810e1294d87daa40c33419a",
+    "content/panel.html": "1a71bafda79a9720c9a0bb08e7fc340da497ab485f2687bed74a5db3ca419d2e"
+  },
+  "validationArtifacts": {
+    "node": ".test-artifacts/node-v0.2.12.log",
+    "chromium": {
+      "reading": ".test-artifacts/ui-d4icq5/result.json",
+      "deletion": ".test-artifacts/ui-deletion-65rDXP/result.json",
+      "floating": ".test-artifacts/ui-floating-dDwFSf/result.json",
+      "localization": ".test-artifacts/ui-language-Oaee4H/result.json",
+      "formulaAndAnnotations": ".test-artifacts/formula-annotations-ui-IiMK79/result.json",
+      "composerFullTextAndSelection": ".test-artifacts/composer-full-text-ui-MW3OXf/result.json"
+    },
+    "native": ".test-artifacts/gecko-rollback-1793247063165-41172082/result.json",
+    "nativeFirst": ".test-artifacts/gecko-rollback-1793247063165-41172082/first.complete.json",
+    "nativeRestart": ".test-artifacts/gecko-rollback-1793247063165-41172082/restart.complete.json",
+    "packageAudit": ".test-artifacts/package-v0.2.12-audit.json"
+  },
+  "commands": [
+    "node --test tests/*.test.mjs",
+    "node scripts/build.mjs --replace-test-build",
+    "node tests/ui-checks.cjs",
+    "node tests/node-deletion-ui.cjs",
+    "node tests/floating-window-ui.mjs",
+    "node tests/localization-ui.mjs",
+    "node tests/formula-annotations-ui.mjs",
+    "node tests/composer-full-text-ui.mjs",
+    "node tests/gecko-rollback/run-isolated.mjs"
+  ],
+  "privacy": {
+    "sourceAllowlistReviewed": true,
+    "workingProfilesOrArchivesIncluded": false,
+    "credentialPatternsFound": false,
+    "localUserPathsFound": false
+  }
+}
